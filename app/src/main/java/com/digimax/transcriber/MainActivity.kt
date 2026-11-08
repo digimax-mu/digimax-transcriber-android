@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,7 +26,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -103,6 +108,10 @@ private fun App() {
     var updating by remember { mutableStateOf(false) }
     var dlPct by remember { mutableStateOf(0) }
 
+    // reel rotation + smoothed VU, driven by the live mic level
+    var angle by remember { mutableStateOf(0f) }
+    var vu by remember { mutableStateOf(0f) }
+
     LaunchedEffect(recording) {
         if (recording) {
             var acc = 0L; var last = System.currentTimeMillis()
@@ -111,9 +120,12 @@ private fun App() {
                 if (!RecState.paused) acc += now - last
                 last = now
                 elapsed = acc / 1000
-                delay(200)
+                val l = if (RecState.paused) 0f else RecState.level
+                vu = if (l > vu) l else vu * 0.82f
+                if (!RecState.paused) angle = (angle + 6f + l * 26f) % 360f
+                delay(33)
             }
-        } else { elapsed = 0; tick++ }
+        } else { elapsed = 0; vu = 0f; tick++ }
     }
 
     LaunchedEffect(Unit) { update = Updater.check() }
@@ -290,6 +302,21 @@ private fun App() {
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // spinning reels over the baked hubs (left/right, same rotation)
+            val reelPx = 0.121f * wPx
+            listOf(Triple(R.drawable.reel_l, 0.332f, 0.432f), Triple(R.drawable.reel_r, 0.656f, 0.432f)).forEach { (res, fcx, fcy) ->
+                Image(
+                    painter = painterResource(res), contentDescription = null,
+                    modifier = Modifier
+                        .offset { IntOffset((fcx * wPx - reelPx / 2f).roundToInt(), (fcy * hPx - reelPx / 2f).roundToInt()) }
+                        .size(with(d) { reelPx.toDp() })
+                        .graphicsLayer { rotationZ = angle }
+                )
+            }
+
+            // live VU over the baked meter strip
+            VuBar(rectMod(0.426f, 0.655f, 0.935f, 0.745f), vu)
+
             // COUNTER digits
             Box(rectMod(0.115f, 0.675f, 0.355f, 0.737f), contentAlignment = Alignment.Center) {
                 Text(fmt(elapsed), color = LcdInk, fontFamily = FontFamily.Monospace,
@@ -298,15 +325,15 @@ private fun App() {
 
             // transport keys
             KeyZone(rectMod(0.065f, 0.799f, 0.365f, 0.964f), enabled = !recording && !busy,
-                highlight = if (recording && !paused) recPulse else 0f) {
+                sunk = recording && !paused, highlight = if (recording && !paused) recPulse else 0f) {
                 if (!RecState.recording) RecorderService.start(ctx)
             }
             KeyZone(rectMod(0.375f, 0.799f, 0.625f, 0.964f), enabled = recording && !busy,
-                highlight = if (paused) recPulse else 0f) {
+                sunk = paused, highlight = if (paused) recPulse else 0f) {
                 if (RecState.recording) { if (RecState.paused) RecorderService.resume(ctx) else RecorderService.pause(ctx) }
             }
             KeyZone(rectMod(0.635f, 0.799f, 0.930f, 0.964f), enabled = recording && !busy,
-                highlight = 0f) {
+                sunk = false, highlight = 0f) {
                 if (RecState.recording) RecorderService.stop(ctx)
             }
 
@@ -392,20 +419,42 @@ private fun App() {
     }
 }
 
-/** Transparent hit-target over a baked key. Darkens on press; glows while its state is active. */
+/** Transparent hit-target over a baked key. Darkens on press or while its state is active (sunk). */
 @Composable
-private fun KeyZone(modifier: Modifier, enabled: Boolean, highlight: Float, onClick: () -> Unit) {
+private fun KeyZone(modifier: Modifier, enabled: Boolean, sunk: Boolean, highlight: Float, onClick: () -> Unit) {
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
     Box(
         modifier.clickable(interactionSource = src, indication = null, enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        if (pressed) Box(Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)).background(Color(0x33000000)))
+        if (pressed || sunk) Box(Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)).background(Color(0x40000000)))
         if (highlight > 0f) Box(
             Modifier.matchParentSize().clip(RoundedCornerShape(12.dp))
                 .border(2.dp, Rec.copy(alpha = highlight), RoundedCornerShape(12.dp))
         )
+    }
+}
+
+/** Live VU bar drawn opaque over the baked meter strip. */
+@Composable
+private fun VuBar(modifier: Modifier, level: Float) {
+    Canvas(modifier) {
+        drawRect(Color(0xFF130E08))                                  // dark glass, covers the baked segments
+        val n = 16
+        val gap = size.width * 0.010f
+        val segW = (size.width - gap * (n - 1)) / n
+        val lit = (level.coerceIn(0f, 1f) * n).toInt()
+        for (i in 0 until n) {
+            val base = when {
+                i >= n * 0.82f -> Color(0xFFD23B22)
+                i >= n * 0.56f -> Color(0xFFE0A52E)
+                else -> Color(0xFF7FB03A)
+            }
+            val c = if (i < lit) base else Color(base.red * 0.22f, base.green * 0.22f, base.blue * 0.22f)
+            drawRoundRect(color = c, topLeft = Offset(i * (segW + gap), 0f),
+                size = Size(segW, size.height), cornerRadius = CornerRadius(3f, 3f))
+        }
     }
 }
 
