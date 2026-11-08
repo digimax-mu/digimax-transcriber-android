@@ -309,7 +309,7 @@ private fun App() {
             )
 
             // spinning cassette hubs — drawn 8-tooth cogs sized to sit flush on the baked hubs
-            val hubPx = 0.0703f * wPx
+            val hubPx = 0.0742f * wPx
             listOf(0.3701f to 0.4815f, 0.6279f to 0.4815f).forEach { (fcx, fcy) ->
                 HubWheel(
                     Modifier
@@ -441,11 +441,11 @@ private fun KeyZone(modifier: Modifier, enabled: Boolean, sunk: Boolean, highlig
     }
 }
 
-private val HubGrey  = Color(0xFFCBC6C0)
+private val HubGrey  = Color(0xFFCDC8C2)
 private val HubGreyLo = Color(0xFFB2ADA4)
 private val HubEdge  = Color(0xFFB0AAA2)
-private val HubTooth = Color(0xFF968F87)
-private val HubCtr   = Color(0xFF786F66)
+private val HubSocket = Color(0xFF342E28)
+private val HubCtr   = Color(0xFF8E867C)
 private val TapeDk  = Color(0xFF3C2A1C)
 private val TapeLt  = Color(0xFF5A4030)
 
@@ -468,28 +468,31 @@ private fun TapeBand(modifier: Modifier, shift: Float, moving: Boolean) {
     }
 }
 
-/** A solid grey cassette hub (rim teeth + centre) drawn over the baked hub for a tight fit, rotated to spin. */
+/** A grey cassette hub with a 6-tooth splined drive socket, drawn over the baked hub (tight fit) and rotated. */
 @Composable
 private fun HubWheel(modifier: Modifier, angle: Float) {
     Canvas(modifier.graphicsLayer { rotationZ = angle }) {
         val cx = size.width / 2f; val cy = size.height / 2f
         val R = size.minDimension / 2f
         fun pt(rad: Float, a: Double) = Offset(cx + (rad * cos(a)).toFloat(), cy + (rad * sin(a)).toFloat())
-        // solid disc, flat grey with a faint radial darkening — no directional light, so no seam while spinning
+        // solid grey hub body, flat (no directional light, so no seam while spinning)
         drawCircle(Brush.radialGradient(listOf(HubGrey, HubGrey, HubGreyLo), center = Offset(cx, cy), radius = R), radius = R, center = Offset(cx, cy))
-        // tooth notches around the rim
-        val n = 8
+        drawCircle(HubEdge, radius = R * 0.9f, center = Offset(cx, cy), style = Stroke(width = R * 0.05f))
+        // dark splined drive socket
+        drawCircle(HubSocket, radius = R * 0.5f, center = Offset(cx, cy))
+        // 6 inward splines (the drive teeth) — symmetric
+        val n = 6
         for (i in 0 until n) {
-            val a = i * 2.0 * PI / n; val wv = 0.18
-            val a1 = pt(R * 0.78f, a - wv); val a2 = pt(R * 0.78f, a + wv)
-            val a3 = pt(R, a + wv * 0.7); val a4 = pt(R, a - wv * 0.7)
+            val a = i * 2.0 * PI / n; val wv = 0.34
+            val o1 = pt(R * 0.5f, a - wv); val o2 = pt(R * 0.5f, a + wv)
+            val v1 = pt(R * 0.26f, a + wv * 0.5); val v2 = pt(R * 0.26f, a - wv * 0.5)
             val p = Path()
-            p.moveTo(a1.x, a1.y); p.lineTo(a2.x, a2.y); p.lineTo(a3.x, a3.y); p.lineTo(a4.x, a4.y); p.close()
-            drawPath(p, HubTooth)
+            p.moveTo(o1.x, o1.y); p.lineTo(o2.x, o2.y); p.lineTo(v1.x, v1.y); p.lineTo(v2.x, v2.y); p.close()
+            drawPath(p, HubGrey)
         }
-        drawCircle(HubEdge, radius = R * 0.58f, center = Offset(cx, cy), style = Stroke(width = R * 0.045f))
-        drawCircle(HubCtr, radius = R * 0.20f, center = Offset(cx, cy))
-        drawCircle(HubGrey, radius = R * 0.07f, center = Offset(cx, cy))
+        // central spindle hole
+        drawCircle(HubSocket, radius = R * 0.15f, center = Offset(cx, cy))
+        drawCircle(HubCtr, radius = R * 0.05f, center = Offset(cx, cy))
     }
 }
 
