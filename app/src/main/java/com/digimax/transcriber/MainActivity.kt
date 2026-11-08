@@ -310,28 +310,22 @@ private fun App() {
 
             // spinning cassette hubs — big photoreal hubs with a slight wobble, clipped to the
             // reel window so they sit UNDER the cassette's window band (not on top of the layout)
-            val hubPx = 0.20f * wPx
+            val hubPx = 0.10f * wPx
             val clipL = 0.168f * wPx; val clipT = 0.408f * hPx
             val clipW = 0.655f * wPx; val clipH = 0.108f * hPx
-            val wob = hubPx * 0.03f
             Box(
                 Modifier
                     .offset { IntOffset(clipL.roundToInt(), clipT.roundToInt()) }
                     .size(with(d) { clipW.toDp() }, with(d) { clipH.toDp() })
                     .clip(RoundedCornerShape(4.dp))
             ) {
-                listOf(Triple(0.3755f, 0.4883f, 0.0), Triple(0.6255f, 0.4879f, 2.1)).forEach { (fcx, fcy, ph) ->
+                listOf(0.3755f to 0.4883f, 0.6255f to 0.4879f).forEach { (fcx, fcy) ->
                     Image(
                         painter = painterResource(R.drawable.hub), contentDescription = null,
                         modifier = Modifier
                             .offset { IntOffset((fcx * wPx - clipL - hubPx / 2f).roundToInt(), (fcy * hPx - clipT - hubPx / 2f).roundToInt()) }
                             .size(with(d) { hubPx.toDp() })
-                            .graphicsLayer {
-                                rotationZ = angle
-                                val ar = Math.toRadians(angle.toDouble())
-                                translationX = (wob * cos(ar + ph)).toFloat()
-                                translationY = (wob * sin(ar + ph)).toFloat()
-                            }
+                            .graphicsLayer { rotationZ = angle }
                     )
                 }
             }
