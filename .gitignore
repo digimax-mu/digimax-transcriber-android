@@ -21,3 +21,9 @@ app/src/main/assets/model/
 
 # Internal planning doc (kept out of the public repo)
 DESIGN.md
+
+# Release signing — NEVER commit (signing key + passwords). Back these up off-repo.
+keystore/
+keystore.properties
+*.keystore
+*.jks
