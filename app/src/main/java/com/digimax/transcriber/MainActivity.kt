@@ -21,10 +21,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -62,7 +64,18 @@ private val LcdInk    = Color(0xFF223018)
 private val SegOff    = Color(0x33000000)
 private val SegGreen  = Color(0xFF4E7A3A)
 private val KeyCream  = Color(0xFFD9C7A1)   // piano-key face
+private val Gloss     = Color(0x33FFFFFF)   // plastic highlight
+private val GlossSoft = Color(0x1AFFFFFF)
+private val Shade     = Color(0x33000000)   // ambient shade
+
 private fun Color.darken(f: Float = 0.80f) = Color(red * f, green * f, blue * f, alpha)
+private fun Color.lighten(f: Float = 0.14f) =
+    Color(red + (1 - red) * f, green + (1 - green) * f, blue + (1 - blue) * f, alpha)
+
+// reusable vertical "moulded plastic" brush: lit top, body, shaded bottom
+private fun plastic(c: Color) = Brush.verticalGradient(
+    0f to c.lighten(0.20f), 0.5f to c, 1f to c.darken(0.86f)
+)
 
 private fun txtOf(wav: File) = File(wav.parentFile, wav.nameWithoutExtension + ".txt")
 private fun emailedOf(wav: File) = File(wav.parentFile, wav.nameWithoutExtension + ".emailed")
@@ -222,8 +235,13 @@ private fun App() {
         )
     }
 
-    Surface(color = Desk, modifier = Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
+    // desk background with a soft top-lit gradient
+    val deskBrush = Brush.verticalGradient(listOf(Desk.lighten(0.10f), Desk, Desk.darken(0.90f)))
+    Surface(modifier = Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().background(deskBrush)
+                .verticalScroll(rememberScrollState()).padding(18.dp)
+        ) {
 
             // top strip — logo now lives on the lid, so this is just the model line
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -234,8 +252,10 @@ private fun App() {
             // ---- the deck ----
             Column(
                 Modifier.fillMaxWidth()
-                    .background(Case, RoundedCornerShape(18.dp))
-                    .border(2.dp, CaseEdge, RoundedCornerShape(18.dp))
+                    .shadow(12.dp, RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Brush.verticalGradient(listOf(Case.lighten(0.12f), Case, Case.darken(0.92f))))
+                    .border(2.dp, Brush.verticalGradient(listOf(CaseEdge.lighten(0.3f), CaseEdge)), RoundedCornerShape(20.dp))
                     .padding(16.dp)
             ) {
                 CassetteLid(recording = recording, angle = angle)
@@ -282,7 +302,9 @@ private fun App() {
             // ---- tape library ----
             Column(
                 Modifier.fillMaxWidth()
-                    .background(Case, RoundedCornerShape(14.dp))
+                    .shadow(6.dp, RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Brush.verticalGradient(listOf(Case.lighten(0.08f), Case)))
                     .border(1.dp, CaseEdge.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
                     .padding(16.dp)
             ) {
@@ -323,8 +345,10 @@ private fun App() {
 private fun CassetteLid(recording: Boolean, angle: Float) {
     Column(
         Modifier.fillMaxWidth()
-            .background(Lid, RoundedCornerShape(14.dp))
-            .border(1.5.dp, LidEdge, RoundedCornerShape(14.dp))
+            .shadow(5.dp, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(Brush.verticalGradient(listOf(Lid.lighten(0.10f), Lid, LidEdge.lighten(0.25f))))
+            .border(1.5.dp, Brush.verticalGradient(listOf(Lid.lighten(0.3f), LidEdge)), RoundedCornerShape(14.dp))
             .padding(top = 10.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -332,15 +356,22 @@ private fun CassetteLid(recording: Boolean, angle: Float) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             repeat(2) {
                 Box(Modifier.width(40.dp).height(8.dp)
-                    .background(LidEdge, RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)))
+                    .background(
+                        Brush.verticalGradient(listOf(LidEdge.darken(0.9f), LidEdge)),
+                        RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)
+                    ))
             }
         }
         Spacer(Modifier.height(12.dp))
 
         // logo on the lid
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(28.dp).background(Rec, RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.size(28.dp)
+                    .shadow(2.dp, RoundedCornerShape(6.dp))
+                    .background(Brush.verticalGradient(listOf(Rec.lighten(0.18f), Rec, Rec.darken(0.85f))), RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("D", color = Lid, fontWeight = FontWeight.Black, fontSize = 20.sp)
             }
             Spacer(Modifier.width(7.dp))
@@ -351,8 +382,9 @@ private fun CassetteLid(recording: Boolean, angle: Float) {
         // middle-band window onto the reels
         Box(
             Modifier.fillMaxWidth().height(118.dp)
-                .background(Window, RoundedCornerShape(10.dp))
-                .border(2.dp, LidEdge, RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(10.dp))
+                .background(Brush.verticalGradient(listOf(Window.lighten(0.14f), Window, Window.darken(0.75f))))
+                .border(2.dp, Brush.verticalGradient(listOf(LidEdge, LidEdge.darken(0.8f))), RoundedCornerShape(10.dp))
         ) {
             Canvas(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
                 val w = size.width; val h = size.height
@@ -362,8 +394,22 @@ private fun CassetteLid(recording: Boolean, angle: Float) {
                 // exposed tape between reels
                 drawLine(Tape, Offset(lx, ly), Offset(rx, ly), strokeWidth = h * 0.05f)
                 listOf(lx, rx).forEach { cx ->
-                    drawCircle(Tape, radius = r, center = Offset(cx, ly))
-                    drawCircle(Case, radius = r * 0.34f, center = Offset(cx, ly))
+                    val c = Offset(cx, ly)
+                    // wound tape with radial shading
+                    drawCircle(
+                        Brush.radialGradient(
+                            listOf(Tape.lighten(0.12f), Tape, Tape.darken(0.7f)),
+                            center = c, radius = r
+                        ), radius = r, center = c
+                    )
+                    // hub, lit from top-left
+                    drawCircle(
+                        Brush.radialGradient(
+                            listOf(Reel.lighten(0.2f), Reel, Reel.darken(0.82f)),
+                            center = Offset(cx - r * 0.15f, ly - r * 0.15f), radius = r * 0.5f
+                        ), radius = r * 0.34f, center = c
+                    )
+                    // spokes rotating
                     val spokes = 6
                     for (k in 0 until spokes) {
                         val a = Math.toRadians((angle + k * 360f / spokes).toDouble())
@@ -374,14 +420,23 @@ private fun CassetteLid(recording: Boolean, angle: Float) {
                             strokeWidth = h * 0.035f
                         )
                     }
-                    drawCircle(Reel, radius = r, center = Offset(cx, ly), style = Stroke(width = 2f))
-                    drawCircle(Reel, radius = r * 0.18f, center = Offset(cx, ly))
+                    drawCircle(Reel, radius = r, center = c, style = Stroke(width = 2f))
+                    drawCircle(Reel, radius = r * 0.18f, center = c)
+                    // specular highlight arc, top-left
+                    drawCircle(Gloss, radius = r * 0.9f, center = c,
+                        style = Stroke(width = h * 0.02f))
                 }
             }
-            // REC lamp
+            // diagonal plastic gloss over the top of the window
+            Box(
+                Modifier.fillMaxWidth().fillMaxHeight(0.5f).align(Alignment.TopCenter)
+                    .background(Brush.verticalGradient(listOf(GlossSoft, Color.Transparent)))
+            )
+            // REC lamp with glow
             if (recording) Box(
                 Modifier.align(Alignment.TopEnd).padding(10.dp).size(11.dp)
-                    .background(Rec, RoundedCornerShape(6.dp))
+                    .shadow(6.dp, RoundedCornerShape(6.dp), ambientColor = Rec, spotColor = Rec)
+                    .background(Brush.radialGradient(listOf(Rec.lighten(0.3f), Rec)), RoundedCornerShape(6.dp))
             )
         }
     }
@@ -390,8 +445,9 @@ private fun CassetteLid(recording: Boolean, angle: Float) {
 @Composable
 private fun LcdBox(text: String) {
     Box(
-        Modifier.background(Lcd, RoundedCornerShape(5.dp))
-            .border(1.dp, LcdInk.copy(alpha = 0.4f), RoundedCornerShape(5.dp))
+        Modifier.clip(RoundedCornerShape(5.dp))
+            .background(Brush.verticalGradient(listOf(Lcd.darken(0.9f), Lcd.lighten(0.08f), Lcd.darken(0.92f))))
+            .border(1.dp, LcdInk.copy(alpha = 0.5f), RoundedCornerShape(5.dp))
             .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
         Text(text, color = LcdInk, fontFamily = FontFamily.Monospace,
@@ -411,12 +467,19 @@ private fun VuMeter(level: Float) {
                 i >= n * 0.60 -> Amber
                 else -> SegGreen
             }
-            drawRoundRect(
-                color = if (i < lit) c else SegOff,
-                topLeft = Offset(i * (segW + gap), 0f),
-                size = Size(segW, size.height),
-                cornerRadius = CornerRadius(2f, 2f)
-            )
+            val x = i * (segW + gap)
+            if (i < lit) {
+                drawRoundRect(
+                    brush = Brush.verticalGradient(listOf(c.lighten(0.35f), c, c.darken(0.8f))),
+                    topLeft = Offset(x, 0f), size = Size(segW, size.height),
+                    cornerRadius = CornerRadius(2f, 2f)
+                )
+            } else {
+                drawRoundRect(
+                    color = SegOff, topLeft = Offset(x, 0f), size = Size(segW, size.height),
+                    cornerRadius = CornerRadius(2f, 2f)
+                )
+            }
         }
     }
 }
@@ -492,6 +555,7 @@ private fun Transport(
 /**
  * Flat mechanical lever: hinged at its TOP edge, the free bottom edge angles down
  * into the chassis. Pressed = tilts further down + a deeper drop shadow in the slot.
+ * The face is a moulded-plastic gradient with a top highlight and a shaded front lip.
  */
 @Composable
 private fun TKey(
@@ -502,18 +566,20 @@ private fun TKey(
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, color = Ink, fontSize = 9.sp, maxLines = 1)
         Spacer(Modifier.height(5.dp))
-        // dark recess the lever sits in
+        // dark recess the lever sits in (inner shadow look)
         Box(
             Modifier.fillMaxWidth().height(64.dp)
-                .background(CaseEdge, RoundedCornerShape(7.dp))
+                .clip(RoundedCornerShape(7.dp))
+                .background(Brush.verticalGradient(listOf(CaseEdge.darken(0.7f), CaseEdge, CaseEdge.lighten(0.15f))))
                 .padding(top = 3.dp, start = 3.dp, end = 3.dp),
             contentAlignment = Alignment.TopCenter
         ) {
             Box(
                 Modifier.fillMaxWidth().height(52.dp)
                     .shadow(
-                        elevation = if (sunk) 12.dp else 4.dp,
-                        shape = RoundedCornerShape(7.dp), clip = false
+                        elevation = if (sunk) 14.dp else 5.dp,
+                        shape = RoundedCornerShape(7.dp), clip = false,
+                        ambientColor = Shade, spotColor = Shade
                     )
                     .graphicsLayer {
                         // pivot on the top edge; negative rotationX dips the bottom edge back/down
@@ -521,16 +587,25 @@ private fun TKey(
                         rotationX = if (sunk) -26f else -13f
                         cameraDistance = 14f * density
                     }
-                    .background(faceColor, RoundedCornerShape(7.dp))
-                    .clickable(enabled = enabled) { onClick() },
-                contentAlignment = Alignment.Center
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(plastic(faceColor))
+                    .clickable(enabled = enabled) { onClick() }
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // top specular highlight
+                Box(
+                    Modifier.fillMaxWidth().fillMaxHeight(0.42f).align(Alignment.TopCenter)
+                        .background(
+                            Brush.verticalGradient(listOf(Gloss, Color.Transparent)),
+                            RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp)
+                        )
+                )
+                Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Spacer(Modifier.weight(1f))
                     Text(glyph, color = glyphColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    // front lip to read as a lever face
-                    Spacer(Modifier.height(6.dp))
-                    Box(Modifier.fillMaxWidth(0.8f).height(3.dp)
-                        .background(faceColor.darken(0.82f), RoundedCornerShape(2.dp)))
+                    Spacer(Modifier.height(5.dp))
+                    // front lip: a shaded band to read as the lever's leading face
+                    Box(Modifier.fillMaxWidth().height(5.dp)
+                        .background(Brush.verticalGradient(listOf(faceColor.darken(0.78f), faceColor.darken(0.6f)))))
                 }
             }
         }
