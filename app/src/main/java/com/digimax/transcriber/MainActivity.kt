@@ -308,9 +308,9 @@ private fun App() {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // spinning cassette hubs — drawn 8-tooth cogs over the baked toothed hubs
-            val hubPx = 0.086f * wPx
-            listOf(0.3788f to 0.4841f, 0.6297f to 0.4841f).forEach { (fcx, fcy) ->
+            // spinning cassette hubs — drawn 8-tooth cogs sized to sit flush on the baked hubs
+            val hubPx = 0.082f * wPx
+            listOf(0.3776f to 0.4813f, 0.6283f to 0.4815f).forEach { (fcx, fcy) ->
                 HubWheel(
                     Modifier
                         .offset { IntOffset((fcx * wPx - hubPx / 2f).roundToInt(), (fcy * hPx - hubPx / 2f).roundToInt()) }
@@ -319,11 +319,8 @@ private fun App() {
                 )
             }
 
-            // the exposed tape moving across the head (the hubs below are what drive it)
-            TapeBand(rectMod(0.438f, 0.462f, 0.588f, 0.487f), angle, recording && !paused)
-
             // live VU over the baked meter strip
-            VuBar(rectMod(0.420f, 0.630f, 0.943f, 0.751f), vu)
+            VuBar(rectMod(0.440f, 0.664f, 0.887f, 0.720f), vu)
 
             // COUNTER digits
             Box(rectMod(0.115f, 0.675f, 0.355f, 0.737f), contentAlignment = Alignment.Center) {
@@ -528,24 +525,15 @@ private fun HubWheel(modifier: Modifier, angle: Float) {
     }
 }
 
-/** Live VU bar drawn opaque over the baked meter strip. */
+/** Live VU: keeps the baked meter art and just dims the segments above the level. */
 @Composable
 private fun VuBar(modifier: Modifier, level: Float) {
     Canvas(modifier) {
-        drawRect(Color(0xFF130E08))                                  // dark glass, covers the baked segments
         val n = 16
-        val gap = size.width * 0.010f
-        val segW = (size.width - gap * (n - 1)) / n
         val lit = (level.coerceIn(0f, 1f) * n).toInt()
-        for (i in 0 until n) {
-            val base = when {
-                i >= n * 0.82f -> Color(0xFFD23B22)
-                i >= n * 0.56f -> Color(0xFFE0A52E)
-                else -> Color(0xFF7FB03A)
-            }
-            val c = if (i < lit) base else Color(base.red * 0.22f, base.green * 0.22f, base.blue * 0.22f)
-            drawRoundRect(color = c, topLeft = Offset(i * (segW + gap), 0f),
-                size = Size(segW, size.height), cornerRadius = CornerRadius(3f, 3f))
+        if (lit < n) {                                               // darken the unlit segments; lit ones show the baked colour
+            val x = size.width * (lit.toFloat() / n)
+            drawRect(Color(0xD8140E09), topLeft = Offset(x, 0f), size = Size(size.width - x, size.height))
         }
     }
 }
