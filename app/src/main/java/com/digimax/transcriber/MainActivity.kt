@@ -56,6 +56,8 @@ private val Lcd       = Color(0xFF9FB08A)   // LCD green-grey
 private val LcdInk    = Color(0xFF223018)
 private val SegOff    = Color(0x33000000)
 private val SegGreen  = Color(0xFF4E7A3A)
+private val KeyCream  = Color(0xFFD9C7A1)   // piano-key face
+private fun Color.darken(f: Float = 0.80f) = Color(red * f, green * f, blue * f, alpha)
 
 private fun txtOf(wav: File) = File(wav.parentFile, wav.nameWithoutExtension + ".txt")
 private fun emailedOf(wav: File) = File(wav.parentFile, wav.nameWithoutExtension + ".emailed")
@@ -100,12 +102,15 @@ private fun App() {
     var vu by remember { mutableStateOf(0f) }
     LaunchedEffect(recording) {
         if (recording) {
-            val t0 = System.currentTimeMillis()
+            var acc = 0L; var last = System.currentTimeMillis()
             while (RecState.recording) {
-                elapsed = (System.currentTimeMillis() - t0) / 1000
-                val l = RecState.level
+                val now = System.currentTimeMillis()
+                if (!RecState.paused) acc += now - last
+                last = now
+                elapsed = acc / 1000
+                val l = if (RecState.paused) 0f else RecState.level
                 vu = if (l > vu) l else vu * 0.82f
-                angle = (angle + 2.5f + l * 14f) % 360f
+                if (!RecState.paused) angle = (angle + 2.5f + l * 14f) % 360f
                 delay(33)
             }
         } else {
@@ -214,21 +219,24 @@ private fun App() {
                 Spacer(Modifier.height(4.dp))
                 VuMeter(vu)
                 Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = { if (RecState.recording) RecorderService.stop(ctx) else RecorderService.start(ctx) },
-                    enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (recording) Ink else Rec, contentColor = Case
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().height(60.dp)
-                ) {
-                    Text(if (recording) "■  STOP" else "●  REC",
-                        fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
-                }
+                Transport(
+                    recording = recording,
+                    paused = RecState.paused,
+                    busy = busy,
+                    onRec = { if (!RecState.recording) RecorderService.start(ctx) },
+                    onPause = {
+                        if (RecState.recording)
+                            if (RecState.paused) RecorderService.resume(ctx) else RecorderService.pause(ctx)
+                    },
+                    onStop = { if (RecState.recording) RecorderService.stop(ctx) }
+                )
                 Spacer(Modifier.height(8.dp))
-                Text(if (recording) "● REC  ·  rolling" else status,
-                    color = if (recording) Rec else Dim, fontSize = 12.sp)
+                val line = when {
+                    recording && RecState.paused -> "II  paused"
+                    recording -> "●  REC · rolling"
+                    else -> status
+                }
+                Text(line, color = if (recording && !RecState.paused) Rec else if (recording) Amber else Dim, fontSize = 12.sp)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -370,6 +378,53 @@ private fun RecRow(
                         shape = RoundedCornerShape(8.dp)) { Text("Transcribe", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                 }
                 OutlinedButton(onClick = onDelete, shape = RoundedCornerShape(8.dp)) { Text("Delete", fontSize = 13.sp, color = Rec) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Transport(
+    recording: Boolean, paused: Boolean, busy: Boolean,
+    onRec: () -> Unit, onPause: () -> Unit, onStop: () -> Unit
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        TKey(Modifier.weight(1f), "REC", "●", sunk = recording, color = Rec,
+            glyphColor = Color.White, enabled = !recording && !busy, onClick = onRec)
+        TKey(Modifier.weight(1f), "PAUSE", "II", sunk = paused, color = KeyCream,
+            glyphColor = Ink, enabled = recording && !busy, onClick = onPause)
+        TKey(Modifier.weight(1f), "STOP", "■", sunk = false, color = KeyCream,
+            glyphColor = Ink, enabled = recording && !busy, onClick = onStop)
+        TKey(Modifier.weight(1f), "REW", "◀◀", sunk = false, color = KeyCream,
+            glyphColor = Dim, enabled = false, dim = true, onClick = {})
+        TKey(Modifier.weight(1f), "F.FWD", "▶▶", sunk = false, color = KeyCream,
+            glyphColor = Dim, enabled = false, dim = true, onClick = {})
+    }
+}
+
+@Composable
+private fun TKey(
+    modifier: Modifier, label: String, glyph: String, sunk: Boolean,
+    color: Color, glyphColor: Color, enabled: Boolean, dim: Boolean = false, onClick: () -> Unit
+) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = if (dim) Dim.copy(alpha = 0.6f) else Ink, fontSize = 9.sp, maxLines = 1)
+        Spacer(Modifier.height(4.dp))
+        Box(
+            Modifier.fillMaxWidth().height(52.dp).background(CaseEdge, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Box(
+                Modifier.fillMaxWidth().height(47.dp)
+                    .offset(y = if (sunk) 5.dp else 0.dp)
+                    .background(
+                        if (sunk) color.darken() else if (dim) color.copy(alpha = 0.55f) else color,
+                        RoundedCornerShape(6.dp)
+                    )
+                    .clickable(enabled = enabled) { onClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(glyph, color = glyphColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

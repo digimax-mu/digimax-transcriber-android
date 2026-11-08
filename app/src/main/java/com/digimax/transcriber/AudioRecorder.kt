@@ -24,6 +24,7 @@ class AudioRecorder(
     }
 
     @Volatile private var running = false
+    @Volatile var paused = false      // while true, audio is dropped (recording held, same file)
     private var worker: Thread? = null
 
     @SuppressLint("MissingPermission") // caller guarantees RECORD_AUDIO is granted
@@ -55,11 +56,15 @@ class AudioRecorder(
                 while (running) {
                     val n = record.read(buf, 0, buf.size)
                     if (n > 0) {
-                        raf.write(buf, 0, n)
-                        dataBytes += n
-                        onLevel(rms(buf, n))
-                        // flush periodically so the file on disk stays current
-                        if (dataBytes % (SAMPLE_RATE * 2L) < buf.size) raf.fd.sync()
+                        if (paused) {
+                            onLevel(0f)                      // hold: drop audio, flatten meter
+                        } else {
+                            raf.write(buf, 0, n)
+                            dataBytes += n
+                            onLevel(rms(buf, n))
+                            // flush periodically so the file on disk stays current
+                            if (dataBytes % (SAMPLE_RATE * 2L) < buf.size) raf.fd.sync()
+                        }
                     }
                 }
             } catch (_: Throwable) {

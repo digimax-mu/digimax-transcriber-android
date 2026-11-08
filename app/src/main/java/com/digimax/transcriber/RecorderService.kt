@@ -18,6 +18,7 @@ import java.io.File
 /** Shared, Compose-observable recorder state. */
 object RecState {
     var recording by mutableStateOf(false)
+    var paused by mutableStateOf(false)
     var lastFile by mutableStateOf<String?>(null)
     var level by mutableStateOf(0f)          // live mic level 0..1 for the waveform
 }
@@ -35,9 +36,16 @@ class RecorderService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> { stopRecording(); stopSelf() }
+            ACTION_PAUSE -> setPaused(true)
+            ACTION_RESUME -> setPaused(false)
             else -> startRecording()
         }
         return START_STICKY
+    }
+
+    private fun setPaused(p: Boolean) {
+        recorder?.paused = p
+        RecState.paused = p
     }
 
     private fun startRecording() {
@@ -54,11 +62,13 @@ class RecorderService : Service() {
         recorder = AudioRecorder(f) { RecState.level = it }.also { it.start() }
         RecState.lastFile = f.absolutePath
         RecState.recording = true
+        RecState.paused = false
     }
 
     private fun stopRecording() {
         recorder?.stop(); recorder = null
         RecState.recording = false
+        RecState.paused = false
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -99,6 +109,8 @@ class RecorderService : Service() {
     companion object {
         const val ACTION_START = "com.digimax.transcriber.START"
         const val ACTION_STOP = "com.digimax.transcriber.STOP"
+        const val ACTION_PAUSE = "com.digimax.transcriber.PAUSE"
+        const val ACTION_RESUME = "com.digimax.transcriber.RESUME"
         const val CHANNEL = "recording"
         const val NOTIF_ID = 1
 
@@ -108,9 +120,13 @@ class RecorderService : Service() {
             )
         }
         fun stop(ctx: Context) {
-            ctx.startService(
-                Intent(ctx, RecorderService::class.java).setAction(ACTION_STOP)
-            )
+            ctx.startService(Intent(ctx, RecorderService::class.java).setAction(ACTION_STOP))
+        }
+        fun pause(ctx: Context) {
+            ctx.startService(Intent(ctx, RecorderService::class.java).setAction(ACTION_PAUSE))
+        }
+        fun resume(ctx: Context) {
+            ctx.startService(Intent(ctx, RecorderService::class.java).setAction(ACTION_RESUME))
         }
     }
 }
