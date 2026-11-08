@@ -29,7 +29,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -51,7 +54,10 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 // ---- palette (matches the deck render) ----
 private val DeckBg  = Color(0xFFE4D2BC)   // cream paper, same as the deck art — seamless under it
@@ -302,15 +308,14 @@ private fun App() {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // spinning reels over the baked hubs (left/right, same rotation)
-            val reelPx = 0.1211f * wPx
-            listOf(Triple(R.drawable.reel_l, 0.3379f, 0.4274f), Triple(R.drawable.reel_r, 0.6514f, 0.4274f)).forEach { (res, fcx, fcy) ->
-                Image(
-                    painter = painterResource(res), contentDescription = null,
-                    modifier = Modifier
-                        .offset { IntOffset((fcx * wPx - reelPx / 2f).roundToInt(), (fcy * hPx - reelPx / 2f).roundToInt()) }
-                        .size(with(d) { reelPx.toDp() })
-                        .graphicsLayer { rotationZ = angle }
+            // spinning cassette hubs — drawn 8-tooth cogs over the baked toothed hubs
+            val hubPx = 0.088f * wPx
+            listOf(0.3701f to 0.4766f, 0.6143f to 0.4766f).forEach { (fcx, fcy) ->
+                HubWheel(
+                    Modifier
+                        .offset { IntOffset((fcx * wPx - hubPx / 2f).roundToInt(), (fcy * hPx - hubPx / 2f).roundToInt()) }
+                        .size(with(d) { hubPx.toDp() }),
+                    angle
                 )
             }
 
@@ -433,6 +438,36 @@ private fun KeyZone(modifier: Modifier, enabled: Boolean, sunk: Boolean, highlig
             Modifier.matchParentSize().clip(RoundedCornerShape(12.dp))
                 .border(2.dp, Rec.copy(alpha = highlight), RoundedCornerShape(12.dp))
         )
+    }
+}
+
+private val HubFace = Color(0xFFEAE6D9)
+private val HubHi   = Color(0xFFF5F2EA)
+private val HubLo   = Color(0xFFCAC3B0)
+
+/** A white 8-tooth cassette hub cog, drawn over the baked hub and rotated for clean spin. */
+@Composable
+private fun HubWheel(modifier: Modifier, angle: Float) {
+    Canvas(modifier.graphicsLayer { rotationZ = angle }) {
+        val cx = size.width / 2f; val cy = size.height / 2f
+        val R = size.minDimension / 2f
+        val rOut = R * 0.97f; val rIn = R * 0.80f
+        val n = 8
+        val tw = (PI / n * 0.52).toFloat()
+        val step = (2.0 * PI / n).toFloat()
+        fun pt(rad: Float, a: Float) = Offset(cx + rad * cos(a.toDouble()).toFloat(), cy + rad * sin(a.toDouble()).toFloat())
+        val path = Path()
+        for (i in 0 until n) {
+            val a = i * step
+            val p1 = pt(rOut, a - tw); val p2 = pt(rOut, a + tw)
+            val v1 = pt(rIn, a + step / 2f - tw * 0.3f); val v2 = pt(rIn, a + step / 2f + tw * 0.3f)
+            if (i == 0) path.moveTo(p1.x, p1.y) else path.lineTo(p1.x, p1.y)
+            path.lineTo(p2.x, p2.y); path.lineTo(v1.x, v1.y); path.lineTo(v2.x, v2.y)
+        }
+        path.close()
+        drawPath(path, Brush.radialGradient(listOf(HubHi, HubFace, HubLo), center = Offset(cx, cy), radius = rOut))
+        drawCircle(HubHi.copy(alpha = 0.5f), radius = R * 0.22f, center = Offset(cx, cy))
+        drawCircle(HubLo.copy(alpha = 0.55f), radius = rOut, center = Offset(cx, cy), style = Stroke(width = R * 0.05f))
     }
 }
 
