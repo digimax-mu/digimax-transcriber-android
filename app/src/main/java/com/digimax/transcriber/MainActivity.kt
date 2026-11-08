@@ -309,8 +309,8 @@ private fun App() {
             )
 
             // spinning cassette hubs — drawn 8-tooth cogs over the baked toothed hubs
-            val hubPx = 0.088f * wPx
-            listOf(0.3701f to 0.4766f, 0.6143f to 0.4766f).forEach { (fcx, fcy) ->
+            val hubPx = 0.086f * wPx
+            listOf(0.3788f to 0.4841f, 0.6297f to 0.4841f).forEach { (fcx, fcy) ->
                 HubWheel(
                     Modifier
                         .offset { IntOffset((fcx * wPx - hubPx / 2f).roundToInt(), (fcy * hPx - hubPx / 2f).roundToInt()) }
