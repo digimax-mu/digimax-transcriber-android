@@ -20,8 +20,8 @@ android {
         applicationId = "com.digimax.transcriber"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.7.5"
+        versionCode = 13
+        versionName = "0.7.6"
         ndk { abiFilters += "arm64-v8a" }   // Nothing Phone (1) is arm64; drop other ABIs to shrink the APK
     }
 

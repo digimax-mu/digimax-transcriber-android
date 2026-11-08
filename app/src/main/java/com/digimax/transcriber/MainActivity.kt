@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -64,7 +65,8 @@ private val DeckBg  = Color(0xFFE4D2BC)   // cream paper, same as the deck art â
 private val Case    = Color(0xFFE7D9B8)   // dialog surface
 private val Ink     = Color(0xFF2A1F14)   // dark-brown text
 private val Dim     = Color(0xFF7A6A52)
-private val Rec     = Color(0xFFB4342A)   // Digimax record red
+private val Rec     = Color(0xFFE3262E)   // Digimax brand red (digimax.mu)
+private val LcdFont = FontFamily(Font(R.font.dseg7_bold))   // 7-segment LCD counter
 private val LcdInk  = Color(0xFF22311A)   // counter digits on the green glass
 
 private const val DECK_AR = 1024f / 1240f   // deck_top.webp
@@ -333,10 +335,11 @@ private fun App() {
             // live VU over the baked meter strip
             VuBar(rectMod(0.440f, 0.664f, 0.887f, 0.720f), vu)
 
-            // COUNTER digits
+            // COUNTER â€” 7-segment LCD with faint ghost segments behind
             Box(rectMod(0.115f, 0.675f, 0.355f, 0.737f), contentAlignment = Alignment.Center) {
-                Text(fmt(elapsed), color = LcdInk, fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold, fontSize = with(d) { (hPx * 0.026f).toSp() }, letterSpacing = 2.sp)
+                val lcdSize = with(d) { (hPx * 0.030f).toSp() }
+                Text("88:88", color = LcdInk.copy(alpha = 0.12f), fontFamily = LcdFont, fontSize = lcdSize)
+                Text(fmt(elapsed), color = LcdInk, fontFamily = LcdFont, fontSize = lcdSize)
             }
 
             // transport keys
