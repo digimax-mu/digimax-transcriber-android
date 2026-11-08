@@ -319,6 +319,10 @@ private fun App() {
                 )
             }
 
+            // the exposed tape moving across the head, and the capstan that drives it
+            TapeBand(rectMod(0.438f, 0.462f, 0.588f, 0.487f), angle, recording && !paused)
+            Capstan(rectMod(0.491f, 0.487f, 0.535f, 0.523f), -angle * 2f)
+
             // live VU over the baked meter strip
             VuBar(rectMod(0.420f, 0.630f, 0.943f, 0.751f), vu)
 
@@ -444,6 +448,46 @@ private fun KeyZone(modifier: Modifier, enabled: Boolean, sunk: Boolean, highlig
 private val HubFace = Color(0xFFEAE6D9)
 private val HubHi   = Color(0xFFF5F2EA)
 private val HubLo   = Color(0xFFCAC3B0)
+private val TapeDk  = Color(0xFF3C2A1C)
+private val TapeLt  = Color(0xFF5A4030)
+
+/** The exposed tape strip across the head, scrolling while recording. */
+@Composable
+private fun TapeBand(modifier: Modifier, shift: Float, moving: Boolean) {
+    Canvas(modifier) {
+        val w = size.width; val h = size.height
+        drawRect(Brush.verticalGradient(listOf(TapeLt, TapeDk, Color(0xFF241810))))
+        // fine vertical tape striations, scrolling horizontally with `shift`
+        val sp = w * 0.055f
+        var x = (shift % sp) - sp
+        while (x < w) {
+            drawLine(Color(0x33000000), Offset(x, 0f), Offset(x, h), strokeWidth = 1.5f)
+            drawLine(Color(0x1AFFFFFF), Offset(x + sp * 0.5f, 0f), Offset(x + sp * 0.5f, h), strokeWidth = 1f)
+            x += sp
+        }
+        // top highlight (light catching the moving tape)
+        drawRect(Brush.verticalGradient(listOf(Color(0x3AFFFFFF), Color.Transparent)), size = Size(w, h * 0.4f))
+    }
+}
+
+/** The capstan / pinch-roller: the spinning drive shaft that pulls the tape past the head. */
+@Composable
+private fun Capstan(modifier: Modifier, angle: Float) {
+    Canvas(modifier.graphicsLayer { rotationZ = angle }) {
+        val cx = size.width / 2f; val cy = size.height / 2f
+        val R = size.minDimension / 2f
+        drawCircle(Brush.radialGradient(listOf(Color(0xFF4A423A), Color(0xFF221C17)), center = Offset(cx - R * 0.3f, cy - R * 0.3f), radius = R), radius = R, center = Offset(cx, cy))  // dark rubber roller, lit top-left
+        for (i in 0 until 3) {                                                            // a couple of marks so the spin reads
+            val a = (i * 120.0) * PI / 180.0
+            drawLine(Color(0x55000000),
+                Offset(cx + (R * 0.2f * cos(a)).toFloat(), cy + (R * 0.2f * sin(a)).toFloat()),
+                Offset(cx + (R * 0.82f * cos(a)).toFloat(), cy + (R * 0.82f * sin(a)).toFloat()),
+                strokeWidth = R * 0.1f)
+        }
+        drawCircle(Color(0xFFD4CDBD), radius = R * 0.24f, center = Offset(cx, cy))        // bright capstan pin
+        drawCircle(Color(0xFF8A8276), radius = R * 0.24f, center = Offset(cx, cy), style = Stroke(width = 1.5f))
+    }
+}
 
 /** A white 8-tooth cassette hub cog, drawn over the baked hub and rotated for clean spin. */
 @Composable
