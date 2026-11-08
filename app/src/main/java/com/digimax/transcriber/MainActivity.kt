@@ -319,9 +319,8 @@ private fun App() {
                 )
             }
 
-            // the exposed tape moving across the head, and the capstan that drives it
+            // the exposed tape moving across the head (the hubs below are what drive it)
             TapeBand(rectMod(0.438f, 0.462f, 0.588f, 0.487f), angle, recording && !paused)
-            Capstan(rectMod(0.491f, 0.487f, 0.535f, 0.523f), -angle * 2f)
 
             // live VU over the baked meter strip
             VuBar(rectMod(0.420f, 0.630f, 0.943f, 0.751f), vu)
@@ -510,7 +509,21 @@ private fun HubWheel(modifier: Modifier, angle: Float) {
         }
         path.close()
         drawPath(path, Brush.radialGradient(listOf(HubHi, HubFace, HubLo), center = Offset(cx, cy), radius = rOut))
-        drawCircle(HubHi.copy(alpha = 0.5f), radius = R * 0.22f, center = Offset(cx, cy))
+        // drive-spindle socket: the dark splined hole the player's spindle turns — this is the drive
+        val sr = R * 0.42f
+        val m = 6
+        val spline = Path()
+        for (i in 0 until m) {
+            val a = i * (2.0 * PI / m).toFloat()
+            val o1 = pt(sr, a - 0.30f); val o2 = pt(sr, a + 0.30f)
+            val v = pt(sr * 0.58f, (i + 0.5f) * (2.0 * PI / m).toFloat())
+            if (i == 0) spline.moveTo(o1.x, o1.y) else spline.lineTo(o1.x, o1.y)
+            spline.lineTo(o2.x, o2.y); spline.lineTo(v.x, v.y)
+        }
+        spline.close()
+        drawPath(spline, Color(0xFF2B2420))
+        drawCircle(Color(0xFF17120E), radius = sr * 0.5f, center = Offset(cx, cy))
+        drawCircle(HubHi.copy(alpha = 0.6f), radius = sr * 0.16f, center = Offset(cx, cy))
         drawCircle(HubLo.copy(alpha = 0.55f), radius = rOut, center = Offset(cx, cy), style = Stroke(width = R * 0.05f))
     }
 }
