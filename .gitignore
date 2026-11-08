@@ -1,0 +1,23 @@
+# Gradle / build output
+.gradle/
+build/
+app/build/
+/captures/
+
+# Local SDK path + any local machine config (never commit)
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Build artifacts (the APK is a release asset, not source)
+*.apk
+*.aab
+
+# Bundled speech model — fetched at build time, not committed (see tools/fetch-model.sh)
+app/src/main/assets/model/
+
+# Internal planning doc (kept out of the public repo)
+DESIGN.md
