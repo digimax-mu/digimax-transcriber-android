@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "0.7.3",
-  "url": "https://github.com/divergentinc2021/digimax-transcriber-android/releases/download/v0.7.3/digimax-transcriber-v0.7.3.apk",
-  "notes": "Extruded 3D transport keys and a deeper deck bevel."
+  "versionCode": 11,
+  "versionName": "0.7.4",
+  "url": "https://github.com/divergentinc2021/digimax-transcriber-android/releases/download/v0.7.4/digimax-transcriber-v0.7.4.apk",
+  "notes": "The app now wears the real cassette-deck render, so it matches the mock."
 }
