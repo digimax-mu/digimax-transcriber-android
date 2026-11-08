@@ -116,6 +116,11 @@ private fun App() {
     var expanded by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<File?>(null) }
 
+    // self-update
+    var update by remember { mutableStateOf<Updater.Update?>(null) }
+    var updating by remember { mutableStateOf(false) }
+    var dlPct by remember { mutableStateOf(0) }
+
     // reel rotation + smoothed VU, driven by the live mic level
     var angle by remember { mutableStateOf(0f) }
     var vu by remember { mutableStateOf(0f) }
@@ -136,6 +141,9 @@ private fun App() {
             vu = 0f; elapsed = 0; tick++
         }
     }
+
+    // silent update check on launch; a non-blocking banner appears only if one is newer
+    LaunchedEffect(Unit) { update = Updater.check() }
 
     fun emailRec(wav: File) {
         val txt = txtOf(wav)
@@ -207,14 +215,28 @@ private fun App() {
             onDismissRequest = { showAbout = false },
             title = { Text("Digimax Transcriber", color = Ink) },
             text = {
-                Text(
-                    "Records and transcribes on-device. No internet permission — nothing " +
-                    "leaves the phone. Transcripts open in your own email app. " +
-                    "Keeps rolling with the screen locked.",
-                    color = Dim, fontSize = 13.sp
-                )
+                Column {
+                    Text(
+                        "Records and transcribes on-device — your audio never leaves the phone. " +
+                        "The only time it reaches the internet is to check for and download app " +
+                        "updates. Transcripts open in your own email app. Keeps rolling with the " +
+                        "screen locked.",
+                        color = Dim, fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text("Version ${BuildConfig.VERSION_NAME}", color = Dim, fontSize = 12.sp)
+                }
             },
-            confirmButton = { TextButton(onClick = { showAbout = false }) { Text("Close", color = Rec) } }
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val u = Updater.check()
+                        if (u != null) { update = u; showAbout = false }
+                        else status = "You're on the latest version."
+                    }
+                }) { Text("Check for updates", color = Rec) }
+            },
+            dismissButton = { TextButton(onClick = { showAbout = false }) { Text("Close", color = Dim) } }
         )
     }
 
@@ -248,6 +270,52 @@ private fun App() {
                 Text("PORTABLE TRANSCRIBER", color = Dim, fontSize = 10.sp, letterSpacing = 2.sp)
             }
             Spacer(Modifier.height(12.dp))
+
+            // ---- update banner (non-blocking) ----
+            update?.let { up ->
+                Column(
+                    Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Brush.verticalGradient(listOf(Amber.lighten(0.18f), Amber.darken(0.92f))))
+                        .border(1.dp, CaseEdge.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text("Update ${up.name} available", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    if (up.notes.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(up.notes, color = Ink, fontSize = 12.sp)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    if (updating) {
+                        LinearProgressIndicator(
+                            progress = { dlPct / 100f },
+                            color = Rec, trackColor = Case.darken(0.9f),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text("Downloading… $dlPct%", color = Ink, fontSize = 11.sp)
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        updating = true; dlPct = 0
+                                        val f = Updater.download(ctx, up) { dlPct = it }
+                                        updating = false
+                                        if (f != null) Updater.install(ctx, f)
+                                        else status = "Update download failed — try again."
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Rec, contentColor = Case),
+                                shape = RoundedCornerShape(8.dp)
+                            ) { Text("Update", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                            OutlinedButton(onClick = { update = null }, shape = RoundedCornerShape(8.dp)) {
+                                Text("Later", color = Ink, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
 
             // ---- the deck ----
             Column(

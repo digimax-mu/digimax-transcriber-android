@@ -20,12 +20,12 @@ android {
         applicationId = "com.digimax.transcriber"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.7.1"
+        versionCode = 9
+        versionName = "0.7.2"
         ndk { abiFilters += "arm64-v8a" }   // Nothing Phone (1) is arm64; drop other ABIs to shrink the APK
     }
 
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
     compileOptions {
