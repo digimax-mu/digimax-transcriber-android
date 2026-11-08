@@ -9,10 +9,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,20 +25,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -43,39 +46,18 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.cos
-import kotlin.math.sin
+import kotlin.math.roundToInt
 
-// ---- full-retro cassette palette ----
-private val Desk      = Color(0xFFBFA373)   // tan "desk" background
-private val Case      = Color(0xFFE7D9B8)   // cream plastic body
-private val Lid       = Color(0xFFEFE3C6)   // ivory lid (a touch lighter than body)
-private val LidEdge   = Color(0xFFCBB686)   // lid bevel
-private val CaseEdge  = Color(0xFF6B4F34)   // brown edge
-private val Ink       = Color(0xFF3A2A1A)   // dark-brown text
-private val Dim       = Color(0xFF7A6A52)
-private val Window    = Color(0xFF1C140F)   // cutout window interior
-private val Reel      = Color(0xFFEADFC4)   // reel spokes
-private val Tape      = Color(0xFF4A3420)   // wound tape
-private val Amber     = Color(0xFFD9A441)
-private val Rec       = Color(0xFFC42B1C)   // record red
-private val Lcd       = Color(0xFF9FB08A)   // LCD green-grey
-private val LcdInk    = Color(0xFF223018)
-private val SegOff    = Color(0x33000000)
-private val SegGreen  = Color(0xFF4E7A3A)
-private val KeyCream  = Color(0xFFD9C7A1)   // piano-key face
-private val Gloss     = Color(0x33FFFFFF)   // plastic highlight
-private val GlossSoft = Color(0x1AFFFFFF)
-private val Shade     = Color(0x33000000)   // ambient shade
+// ---- palette (matches the deck render) ----
+private val DeckBg  = Color(0xFFE4D2BC)   // cream paper, same as the deck art — seamless under it
+private val Case    = Color(0xFFE7D9B8)   // dialog surface
+private val Ink     = Color(0xFF2A1F14)   // dark-brown text
+private val Dim     = Color(0xFF7A6A52)
+private val Rec     = Color(0xFFB4342A)   // Digimax record red
+private val LcdInk  = Color(0xFF22311A)   // counter digits on the green glass
 
-private fun Color.darken(f: Float = 0.80f) = Color(red * f, green * f, blue * f, alpha)
-private fun Color.lighten(f: Float = 0.14f) =
-    Color(red + (1 - red) * f, green + (1 - green) * f, blue + (1 - blue) * f, alpha)
-
-// reusable vertical "moulded plastic" brush: lit top, body, shaded bottom
-private fun plastic(c: Color) = Brush.verticalGradient(
-    0f to c.lighten(0.20f), 0.5f to c, 1f to c.darken(0.86f)
-)
+private const val DECK_AR = 1024f / 1240f   // deck_top.webp
+private const val NAV_AR  = 1024f / 132f    // nav_bar.webp
 
 private fun txtOf(wav: File) = File(wav.parentFile, wav.nameWithoutExtension + ".txt")
 private fun emailedOf(wav: File) = File(wav.parentFile, wav.nameWithoutExtension + ".emailed")
@@ -103,27 +85,24 @@ private fun App() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val recording = RecState.recording
+    val paused = RecState.paused
 
     var elapsed by remember { mutableStateOf(0L) }
     var tick by remember { mutableStateOf(0) }
-    var status by remember { mutableStateOf("Press REC. Lock the phone — it keeps rolling.") }
+    var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var lastDone by remember { mutableStateOf<String?>(null) }
     var destEmail by remember { mutableStateOf(Prefs.getEmail(ctx)) }
     var showEmailDialog by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var pendingEmailWav by remember { mutableStateOf<File?>(null) }
-    var expanded by remember { mutableStateOf<String?>(null) }
+    var detailWav by remember { mutableStateOf<File?>(null) }
     var deleteTarget by remember { mutableStateOf<File?>(null) }
 
-    // self-update
     var update by remember { mutableStateOf<Updater.Update?>(null) }
     var updating by remember { mutableStateOf(false) }
     var dlPct by remember { mutableStateOf(0) }
 
-    // reel rotation + smoothed VU, driven by the live mic level
-    var angle by remember { mutableStateOf(0f) }
-    var vu by remember { mutableStateOf(0f) }
     LaunchedEffect(recording) {
         if (recording) {
             var acc = 0L; var last = System.currentTimeMillis()
@@ -132,17 +111,11 @@ private fun App() {
                 if (!RecState.paused) acc += now - last
                 last = now
                 elapsed = acc / 1000
-                val l = if (RecState.paused) 0f else RecState.level
-                vu = if (l > vu) l else vu * 0.82f
-                if (!RecState.paused) angle = (angle + 2.5f + l * 14f) % 360f
-                delay(33)
+                delay(200)
             }
-        } else {
-            vu = 0f; elapsed = 0; tick++
-        }
+        } else { elapsed = 0; tick++ }
     }
 
-    // silent update check on launch; a non-blocking banner appears only if one is newer
     LaunchedEffect(Unit) { update = Updater.check() }
 
     fun emailRec(wav: File) {
@@ -167,13 +140,12 @@ private fun App() {
         val text = runCatching { Transcriber.transcribe(ctx, wav) }.getOrElse { "Error: ${it.message}" }
         busy = false
         if (text.isNotBlank()) {
-            txtOf(wav).writeText(text); expanded = wav.name; status = "Transcribed."
+            txtOf(wav).writeText(text); status = "Transcribed."
             if (destEmail.isBlank()) { pendingEmailWav = null; showEmailDialog = true }
         } else status = "No speech detected."
         tick++
     }
 
-    // transcribe automatically once a recording finishes
     LaunchedEffect(recording) {
         if (!recording) {
             val f = RecState.lastFile
@@ -187,6 +159,7 @@ private fun App() {
             ?.sortedByDescending { it.lastModified() } ?: emptyList()
     }
 
+    // ---------- dialogs ----------
     if (showEmailDialog) {
         var draft by remember { mutableStateOf(destEmail) }
         AlertDialog(
@@ -249,7 +222,7 @@ private fun App() {
             confirmButton = {
                 TextButton(onClick = {
                     wav.delete(); txtOf(wav).delete(); emailedOf(wav).delete()
-                    if (expanded == wav.name) expanded = null
+                    if (detailWav == wav) detailWav = null
                     deleteTarget = null; tick++
                 }) { Text("Delete", color = Rec) }
             },
@@ -257,423 +230,202 @@ private fun App() {
         )
     }
 
-    // desk background with a soft top-lit gradient
-    val deskBrush = Brush.verticalGradient(listOf(Desk.lighten(0.10f), Desk, Desk.darken(0.90f)))
-    Surface(modifier = Modifier.fillMaxSize()) {
-        Column(
-            Modifier.fillMaxSize().background(deskBrush)
-                .verticalScroll(rememberScrollState()).padding(18.dp)
-        ) {
-
-            // top strip — logo now lives on the lid, so this is just the model line
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Text("PORTABLE TRANSCRIBER", color = Dim, fontSize = 10.sp, letterSpacing = 2.sp)
+    detailWav?.let { wav ->
+        val txt = txtOf(wav)
+        val emailed = emailedOf(wav).exists()
+        AlertDialog(
+            containerColor = Case,
+            onDismissRequest = { detailWav = null },
+            title = { Text(stamp.format(Date(wav.lastModified())), color = Ink) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("${wav.length() / 1024} KB · " +
+                        when { emailed -> "EMAILED"; txt.exists() -> "TRANSCRIBED"; else -> "RECORDED" },
+                        color = if (emailed) Rec else Dim, fontSize = 11.sp, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Text(if (txt.exists()) txt.readText() else "Not transcribed yet.", color = Ink, fontSize = 14.sp)
+                }
+            },
+            confirmButton = {
+                if (txt.exists())
+                    TextButton(enabled = !busy, onClick = { emailRec(wav) }) { Text("Email", color = Rec, fontWeight = FontWeight.Bold) }
+                else
+                    TextButton(enabled = !busy, onClick = { scope.launch { lastDone = wav.absolutePath; transcribe(wav) } }) { Text("Transcribe", color = Rec, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { deleteTarget = wav }) { Text("Delete", color = Dim) }
+                    TextButton(onClick = { detailWav = null }) { Text("Close", color = Dim) }
+                }
             }
-            Spacer(Modifier.height(12.dp))
+        )
+    }
 
-            // ---- update banner (non-blocking) ----
+    // ---------- layout: photoreal deck (top) · tape library (fills) · nav (bottom) ----------
+    val recPulse by rememberInfiniteTransition(label = "rec").animateFloat(
+        0.25f, 0.95f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "recPulse"
+    )
+    val d = LocalDensity.current
+
+    Column(Modifier.fillMaxSize().background(DeckBg)) {
+
+        // ---- DECK (fixed aspect, overlays positioned by fraction) ----
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val wPx = constraints.maxWidth.toFloat()
+            val hPx = wPx / DECK_AR
+
+            @Composable
+            fun rectMod(fx0: Float, fy0: Float, fx1: Float, fy1: Float): Modifier {
+                val x = fx0 * wPx; val y = fy0 * hPx
+                val w = (fx1 - fx0) * wPx; val h = (fy1 - fy0) * hPx
+                return Modifier
+                    .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+                    .size(with(d) { w.toDp() }, with(d) { h.toDp() })
+            }
+
+            Image(
+                painter = painterResource(R.drawable.deck_top),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // COUNTER digits
+            Box(rectMod(0.115f, 0.675f, 0.355f, 0.737f), contentAlignment = Alignment.Center) {
+                Text(fmt(elapsed), color = LcdInk, fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold, fontSize = with(d) { (hPx * 0.026f).toSp() }, letterSpacing = 2.sp)
+            }
+
+            // transport keys
+            KeyZone(rectMod(0.065f, 0.799f, 0.365f, 0.964f), enabled = !recording && !busy,
+                highlight = if (recording && !paused) recPulse else 0f) {
+                if (!RecState.recording) RecorderService.start(ctx)
+            }
+            KeyZone(rectMod(0.375f, 0.799f, 0.625f, 0.964f), enabled = recording && !busy,
+                highlight = if (paused) recPulse else 0f) {
+                if (RecState.recording) { if (RecState.paused) RecorderService.resume(ctx) else RecorderService.pause(ctx) }
+            }
+            KeyZone(rectMod(0.635f, 0.799f, 0.930f, 0.964f), enabled = recording && !busy,
+                highlight = 0f) {
+                if (RecState.recording) RecorderService.stop(ctx)
+            }
+
+            // update banner — floats over the top paper margin
             update?.let { up ->
                 Column(
-                    Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Brush.verticalGradient(listOf(Amber.lighten(0.18f), Amber.darken(0.92f))))
-                        .border(1.dp, CaseEdge.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                        .padding(12.dp)
+                    Modifier.align(Alignment.TopCenter).padding(top = 8.dp, start = 14.dp, end = 14.dp)
+                        .zIndex(2f).clip(RoundedCornerShape(12.dp)).background(Rec).padding(12.dp)
                 ) {
-                    Text("Update ${up.name} available", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    if (up.notes.isNotBlank()) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(up.notes, color = Ink, fontSize = 12.sp)
-                    }
+                    Text("Update ${up.name} available", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    if (up.notes.isNotBlank()) { Spacer(Modifier.height(2.dp)); Text(up.notes, color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp) }
                     Spacer(Modifier.height(10.dp))
                     if (updating) {
-                        LinearProgressIndicator(
-                            progress = { dlPct / 100f },
-                            color = Rec, trackColor = Case.darken(0.9f),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text("Downloading… $dlPct%", color = Ink, fontSize = 11.sp)
+                        LinearProgressIndicator(progress = { dlPct / 100f }, color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(4.dp)); Text("Downloading… $dlPct%", color = Color.White, fontSize = 11.sp)
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    scope.launch {
-                                        updating = true; dlPct = 0
-                                        val f = Updater.download(ctx, up) { dlPct = it }
-                                        updating = false
-                                        if (f != null) Updater.install(ctx, f)
-                                        else status = "Update download failed — try again."
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Rec, contentColor = Case),
-                                shape = RoundedCornerShape(8.dp)
-                            ) { Text("Update", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                            Button(onClick = {
+                                scope.launch {
+                                    updating = true; dlPct = 0
+                                    val f = Updater.download(ctx, up) { dlPct = it }
+                                    updating = false
+                                    if (f != null) Updater.install(ctx, f) else status = "Update download failed — try again."
+                                }
+                            }, colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Rec),
+                                shape = RoundedCornerShape(8.dp)) { Text("Update", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
                             OutlinedButton(onClick = { update = null }, shape = RoundedCornerShape(8.dp)) {
-                                Text("Later", color = Ink, fontSize = 13.sp)
+                                Text("Later", color = Color.White, fontSize = 13.sp)
                             }
                         }
                     }
                 }
             }
-
-            // ---- the deck ----
-            Column(
-                Modifier.fillMaxWidth()
-                    .shadow(16.dp, RoundedCornerShape(20.dp))
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Brush.verticalGradient(listOf(Case.lighten(0.28f), Case, Case.darken(0.80f))))
-                    .border(2.dp, Brush.verticalGradient(listOf(Case.lighten(0.55f), CaseEdge.darken(0.75f))), RoundedCornerShape(20.dp))
-                    .padding(16.dp)
-            ) {
-                CassetteLid(recording = recording, angle = angle)
-                Spacer(Modifier.height(16.dp))
-
-                // COUNTER + VU row
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        LcdBox(fmt(elapsed))
-                        Spacer(Modifier.height(3.dp))
-                        Text("COUNTER", color = Dim, fontSize = 8.sp, letterSpacing = 2.sp)
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        VuMeter(vu)
-                        Spacer(Modifier.height(3.dp))
-                        Text("VU", color = Dim, fontSize = 8.sp, letterSpacing = 2.sp)
-                    }
-                }
-
-                Spacer(Modifier.height(18.dp))
-                Transport(
-                    recording = recording,
-                    paused = RecState.paused,
-                    busy = busy,
-                    onRec = { if (!RecState.recording) RecorderService.start(ctx) },
-                    onPause = {
-                        if (RecState.recording)
-                            if (RecState.paused) RecorderService.resume(ctx) else RecorderService.pause(ctx)
-                    },
-                    onStop = { if (RecState.recording) RecorderService.stop(ctx) }
-                )
-                Spacer(Modifier.height(10.dp))
-                val line = when {
-                    recording && RecState.paused -> "II  paused"
-                    recording -> "●  REC · rolling"
-                    else -> status
-                }
-                Text(line, color = if (recording && !RecState.paused) Rec else if (recording) Amber else Dim, fontSize = 12.sp)
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // ---- tape library ----
-            Column(
-                Modifier.fillMaxWidth()
-                    .shadow(6.dp, RoundedCornerShape(14.dp))
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Brush.verticalGradient(listOf(Case.lighten(0.08f), Case)))
-                    .border(1.dp, CaseEdge.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-                    .padding(16.dp)
-            ) {
-                Text("TAPES", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp, letterSpacing = 2.sp)
-                Spacer(Modifier.height(6.dp))
-                if (files.isEmpty()) {
-                    Text("No tapes yet.", color = Dim, fontSize = 13.sp)
-                } else {
-                    files.forEachIndexed { idx, wav ->
-                        if (idx > 0) HorizontalDivider(color = CaseEdge.copy(alpha = 0.2f))
-                        RecRow(wav, expanded == wav.name, busy,
-                            onToggle = { expanded = if (expanded == wav.name) null else wav.name },
-                            onTranscribe = { scope.launch { lastDone = wav.absolutePath; transcribe(wav) } },
-                            onEmail = { emailRec(wav) },
-                            onDelete = { deleteTarget = wav })
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            // ---- bottom nav ----
-            HorizontalDivider(color = Rec.copy(alpha = 0.5f))
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically) {
-                NavItem("TAPES", active = true) { expanded = null }
-                NavItem("SETTINGS", active = false) { pendingEmailWav = null; showEmailDialog = true }
-                NavItem("ABOUT", active = false) { showAbout = true }
-            }
-            Spacer(Modifier.height(8.dp))
         }
-    }
-}
 
-/** Closed opaque ivory lid: hinges, DIGIMAX logo, and a middle-band window onto the reels. */
-@Composable
-private fun CassetteLid(recording: Boolean, angle: Float) {
-    Column(
-        Modifier.fillMaxWidth()
-            .shadow(5.dp, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp))
-            .background(Brush.verticalGradient(listOf(Lid.lighten(0.10f), Lid, LidEdge.lighten(0.25f))))
-            .border(1.5.dp, Brush.verticalGradient(listOf(Lid.lighten(0.3f), LidEdge)), RoundedCornerShape(14.dp))
-            .padding(top = 10.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // hinge tabs
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            repeat(2) {
-                Box(Modifier.width(40.dp).height(8.dp)
-                    .background(
-                        Brush.verticalGradient(listOf(LidEdge.darken(0.9f), LidEdge)),
-                        RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)
-                    ))
-            }
+        // ---- status line ----
+        val line = when {
+            recording && paused -> "II  paused"
+            recording -> "●  REC · rolling — lock the phone, it keeps going"
+            status.isNotBlank() -> status
+            else -> ""
         }
-        Spacer(Modifier.height(12.dp))
+        Text(
+            line, color = if (recording && !paused) Rec else Dim, fontSize = 11.sp,
+            textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp)
+        )
 
-        // logo on the lid
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(28.dp)
-                    .shadow(2.dp, RoundedCornerShape(6.dp))
-                    .background(Brush.verticalGradient(listOf(Rec.lighten(0.18f), Rec, Rec.darken(0.85f))), RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("D", color = Lid, fontWeight = FontWeight.Black, fontSize = 20.sp)
-            }
-            Spacer(Modifier.width(7.dp))
-            Text("DIGIMAX", color = Rec, fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = 1.sp)
-        }
-        Spacer(Modifier.height(12.dp))
-
-        // middle-band window onto the reels
-        Box(
-            Modifier.fillMaxWidth().height(118.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Brush.verticalGradient(listOf(Window.lighten(0.14f), Window, Window.darken(0.75f))))
-                .border(2.dp, Brush.verticalGradient(listOf(LidEdge, LidEdge.darken(0.8f))), RoundedCornerShape(10.dp))
-        ) {
-            Canvas(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
-                val w = size.width; val h = size.height
-                val r = h * 0.40f
-                val ly = h * 0.52f
-                val lx = w * 0.27f; val rx = w * 0.73f
-                // exposed tape between reels
-                drawLine(Tape, Offset(lx, ly), Offset(rx, ly), strokeWidth = h * 0.05f)
-                listOf(lx, rx).forEach { cx ->
-                    val c = Offset(cx, ly)
-                    // wound tape with radial shading
-                    drawCircle(
-                        Brush.radialGradient(
-                            listOf(Tape.lighten(0.12f), Tape, Tape.darken(0.7f)),
-                            center = c, radius = r
-                        ), radius = r, center = c
-                    )
-                    // hub, lit from top-left
-                    drawCircle(
-                        Brush.radialGradient(
-                            listOf(Reel.lighten(0.2f), Reel, Reel.darken(0.82f)),
-                            center = Offset(cx - r * 0.15f, ly - r * 0.15f), radius = r * 0.5f
-                        ), radius = r * 0.34f, center = c
-                    )
-                    // spokes rotating
-                    val spokes = 6
-                    for (k in 0 until spokes) {
-                        val a = Math.toRadians((angle + k * 360f / spokes).toDouble())
-                        drawLine(
-                            Reel,
-                            Offset(cx + cos(a).toFloat() * r * 0.34f, ly + sin(a).toFloat() * r * 0.34f),
-                            Offset(cx + cos(a).toFloat() * r * 0.92f, ly + sin(a).toFloat() * r * 0.92f),
-                            strokeWidth = h * 0.035f
-                        )
-                    }
-                    drawCircle(Reel, radius = r, center = c, style = Stroke(width = 2f))
-                    drawCircle(Reel, radius = r * 0.18f, center = c)
-                    // specular highlight arc, top-left
-                    drawCircle(Gloss, radius = r * 0.9f, center = c,
-                        style = Stroke(width = h * 0.02f))
-                }
-            }
-            // diagonal plastic gloss over the top of the window
-            Box(
-                Modifier.fillMaxWidth().fillMaxHeight(0.5f).align(Alignment.TopCenter)
-                    .background(Brush.verticalGradient(listOf(GlossSoft, Color.Transparent)))
-            )
-            // REC lamp with glow
-            if (recording) Box(
-                Modifier.align(Alignment.TopEnd).padding(10.dp).size(11.dp)
-                    .shadow(6.dp, RoundedCornerShape(6.dp), ambientColor = Rec, spotColor = Rec)
-                    .background(Brush.radialGradient(listOf(Rec.lighten(0.3f), Rec)), RoundedCornerShape(6.dp))
-            )
-        }
-    }
-}
-
-@Composable
-private fun LcdBox(text: String) {
-    Box(
-        Modifier.clip(RoundedCornerShape(5.dp))
-            .background(Brush.verticalGradient(listOf(Lcd.darken(0.9f), Lcd.lighten(0.08f), Lcd.darken(0.92f))))
-            .border(1.dp, LcdInk.copy(alpha = 0.5f), RoundedCornerShape(5.dp))
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-    ) {
-        Text(text, color = LcdInk, fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold, fontSize = 18.sp, letterSpacing = 2.sp)
-    }
-}
-
-@Composable
-private fun VuMeter(level: Float) {
-    Canvas(Modifier.fillMaxWidth().height(22.dp)) {
-        val n = 22; val gap = 3f
-        val segW = (size.width - gap * (n - 1)) / n
-        val lit = (level.coerceIn(0f, 1f) * n).toInt()
-        for (i in 0 until n) {
-            val c = when {
-                i >= n * 0.85 -> Rec
-                i >= n * 0.60 -> Amber
-                else -> SegGreen
-            }
-            val x = i * (segW + gap)
-            if (i < lit) {
-                drawRoundRect(
-                    brush = Brush.verticalGradient(listOf(c.lighten(0.35f), c, c.darken(0.8f))),
-                    topLeft = Offset(x, 0f), size = Size(segW, size.height),
-                    cornerRadius = CornerRadius(2f, 2f)
-                )
+        // ---- TAPES library (fills remaining space) ----
+        Column(Modifier.weight(1f).fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 2.dp)) {
+            Text("TAPES", color = Rec, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = 2.sp)
+            Spacer(Modifier.height(5.dp))
+            HorizontalDivider(color = Rec.copy(alpha = 0.6f))
+            if (files.isEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("No tapes yet — press REC.", color = Dim, fontSize = 13.sp)
             } else {
-                drawRoundRect(
-                    color = SegOff, topLeft = Offset(x, 0f), size = Size(segW, size.height),
-                    cornerRadius = CornerRadius(2f, 2f)
-                )
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    files.forEachIndexed { i, wav ->
+                        if (i > 0) HorizontalDivider(color = Rec.copy(alpha = 0.12f))
+                        TapeRow(i + 1, wav, 15.sp, 11.sp) { detailWav = wav }
+                    }
+                }
+            }
+        }
+
+        // ---- NAV bar (static art + tap thirds), pinned to the bottom ----
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val navH = with(d) { (constraints.maxWidth.toFloat() / NAV_AR).toDp() }
+            Image(
+                painter = painterResource(R.drawable.nav_bar),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(Modifier.fillMaxWidth().height(navH)) {
+                Box(Modifier.weight(1f).fillMaxHeight().clickable { detailWav = null })
+                Box(Modifier.weight(1f).fillMaxHeight().clickable { pendingEmailWav = null; showEmailDialog = true })
+                Box(Modifier.weight(1f).fillMaxHeight().clickable { showAbout = true })
             }
         }
     }
 }
 
+/** Transparent hit-target over a baked key. Darkens on press; glows while its state is active. */
 @Composable
-private fun RecRow(
-    wav: File, expanded: Boolean, busy: Boolean,
-    onToggle: () -> Unit, onTranscribe: () -> Unit, onEmail: () -> Unit, onDelete: () -> Unit
-) {
+private fun KeyZone(modifier: Modifier, enabled: Boolean, highlight: Float, onClick: () -> Unit) {
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    Box(
+        modifier.clickable(interactionSource = src, indication = null, enabled = enabled) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        if (pressed) Box(Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)).background(Color(0x33000000)))
+        if (highlight > 0f) Box(
+            Modifier.matchParentSize().clip(RoundedCornerShape(12.dp))
+                .border(2.dp, Rec.copy(alpha = highlight), RoundedCornerShape(12.dp))
+        )
+    }
+}
+
+/** One compact row in the TAPES panel — red index, timestamp, state, chevron. */
+@Composable
+private fun TapeRow(n: Int, wav: File, title: TextUnit, sub: TextUnit, onClick: () -> Unit) {
     val txt = txtOf(wav)
     val emailed = emailedOf(wav).exists()
     val state = when { emailed -> "EMAILED"; txt.exists() -> "TRANSCRIBED"; else -> "RECORDED" }
-    Column(Modifier.fillMaxWidth().clickable { onToggle() }.padding(vertical = 10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Column(Modifier.weight(1f)) {
-                Text(stamp.format(Date(wav.lastModified())), color = Ink, fontSize = 14.sp)
-                Text("${wav.length() / 1024} KB · $state", color = if (emailed) Rec else Dim,
-                    fontSize = 11.sp, letterSpacing = 1.sp)
-            }
-            Text(if (expanded) "▲" else "▼", color = Dim, fontSize = 12.sp)
-        }
-        if (expanded) {
-            Spacer(Modifier.height(8.dp))
-            Text(if (txt.exists()) txt.readText() else "Not transcribed yet.", color = Ink, fontSize = 14.sp)
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (txt.exists()) {
-                    Button(onClick = onEmail, enabled = !busy,
-                        colors = ButtonDefaults.buttonColors(containerColor = Rec, contentColor = Case),
-                        shape = RoundedCornerShape(8.dp)) { Text("Email", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
-                } else {
-                    Button(onClick = onTranscribe, enabled = !busy,
-                        colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Case),
-                        shape = RoundedCornerShape(8.dp)) { Text("Transcribe", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
-                }
-                OutlinedButton(onClick = onDelete, shape = RoundedCornerShape(8.dp)) { Text("Delete", fontSize = 13.sp, color = Rec) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NavItem(label: String, active: Boolean, onClick: () -> Unit) {
-    Column(
-        Modifier.clickable { onClick() }.padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Row(
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(22.dp).background(
-            if (active) Rec else Dim.copy(alpha = 0.5f), RoundedCornerShape(4.dp)
-        ))
-        Spacer(Modifier.height(4.dp))
-        Text(label, color = if (active) Rec else Dim, fontSize = 10.sp,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, letterSpacing = 1.sp)
-    }
-}
-
-@Composable
-private fun Transport(
-    recording: Boolean, paused: Boolean, busy: Boolean,
-    onRec: () -> Unit, onPause: () -> Unit, onStop: () -> Unit
-) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        TKey(Modifier.weight(1f), "REC", "●", sunk = recording && !paused, color = Rec,
-            glyphColor = Color.White, enabled = !recording && !busy, onClick = onRec)
-        TKey(Modifier.weight(1f), "PAUSE", "II", sunk = paused, color = KeyCream,
-            glyphColor = Ink, enabled = recording && !busy, onClick = onPause)
-        TKey(Modifier.weight(1f), "STOP", "■", sunk = false, color = KeyCream,
-            glyphColor = Ink, enabled = recording && !busy, onClick = onStop)
-    }
-}
-
-/**
- * Extruded 3D push-key. A dark base block shows the button's side-wall thickness;
- * the moulded face sits raised on top with a hard top-light→dark gradient, a bright
- * specular strip and a deep drop shadow. Pressed = the face drops onto the base, the
- * side wall moves to the top edge (reads as pushed into the slot) and the shadow shrinks.
- */
-@Composable
-private fun TKey(
-    modifier: Modifier, label: String, glyph: String, sunk: Boolean,
-    color: Color, glyphColor: Color, enabled: Boolean, onClick: () -> Unit
-) {
-    val faceColor = if (sunk) color.darken(0.93f) else color
-    val wall = 9.dp
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = Ink, fontSize = 9.sp, maxLines = 1)
-        Spacer(Modifier.height(5.dp))
-        // recessed chassis slot the key sits in
-        Box(
-            Modifier.fillMaxWidth().height(62.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(Brush.verticalGradient(listOf(CaseEdge.darken(0.5f), CaseEdge.darken(0.82f))))
-                .padding(4.dp)
-        ) {
-            // BASE — the button's body/side wall (dark), fills the slot
-            Box(
-                Modifier.fillMaxSize()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Brush.verticalGradient(listOf(faceColor.darken(0.74f), faceColor.darken(0.5f))))
-            )
-            // FACE — raised on top; drops by `wall` when pressed
-            Box(
-                Modifier.fillMaxWidth().height(45.dp)
-                    .offset(y = if (sunk) wall else 0.dp)
-                    .shadow(
-                        elevation = if (sunk) 2.dp else 10.dp,
-                        shape = RoundedCornerShape(8.dp), clip = false,
-                        ambientColor = Shade, spotColor = Shade
-                    )
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Brush.verticalGradient(
-                        listOf(faceColor.lighten(0.34f), faceColor, faceColor.darken(0.88f))))
-                    .clickable(enabled = enabled) { onClick() },
-                contentAlignment = Alignment.Center
-            ) {
-                // bright specular strip across the top
-                Box(
-                    Modifier.fillMaxWidth().fillMaxHeight(0.40f).align(Alignment.TopCenter)
-                        .background(
-                            Brush.verticalGradient(listOf(Gloss, Color.Transparent)),
-                            RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-                        )
-                )
-                Text(glyph, color = glyphColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        Text("$n", color = Rec, fontWeight = FontWeight.Bold, fontSize = title)
+        Spacer(Modifier.width(12.dp))
+        Text(stamp.format(Date(wav.lastModified())), color = Ink, fontSize = title,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(8.dp))
+        Text(state, color = if (emailed) Rec else Dim, fontSize = sub, letterSpacing = 1.sp)
+        Spacer(Modifier.width(8.dp))
+        Text("›", color = Rec, fontSize = title)
     }
 }
