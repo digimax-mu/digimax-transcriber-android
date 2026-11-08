@@ -308,15 +308,26 @@ private fun App() {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // spinning cassette hubs — drawn 8-tooth cogs sized to sit flush on the baked hubs
-            val hubPx = 0.108f * wPx
-            listOf(0.3755f to 0.4883f, 0.6255f to 0.4879f).forEach { (fcx, fcy) ->
-                HubWheel(
-                    Modifier
-                        .offset { IntOffset((fcx * wPx - hubPx / 2f).roundToInt(), (fcy * hPx - hubPx / 2f).roundToInt()) }
-                        .size(with(d) { hubPx.toDp() }),
-                    angle
-                )
+            // spinning cassette hubs — big photoreal hubs, clipped to the reel window so they
+            // sit UNDER the cassette's window band (not floating on top of the layout)
+            val hubPx = 0.20f * wPx
+            val clipL = 0.168f * wPx; val clipT = 0.408f * hPx
+            val clipW = 0.655f * wPx; val clipH = 0.108f * hPx
+            Box(
+                Modifier
+                    .offset { IntOffset(clipL.roundToInt(), clipT.roundToInt()) }
+                    .size(with(d) { clipW.toDp() }, with(d) { clipH.toDp() })
+                    .clip(RoundedCornerShape(4.dp))
+            ) {
+                listOf(0.3755f to 0.4883f, 0.6255f to 0.4879f).forEach { (fcx, fcy) ->
+                    Image(
+                        painter = painterResource(R.drawable.hub), contentDescription = null,
+                        modifier = Modifier
+                            .offset { IntOffset((fcx * wPx - clipL - hubPx / 2f).roundToInt(), (fcy * hPx - clipT - hubPx / 2f).roundToInt()) }
+                            .size(with(d) { hubPx.toDp() })
+                            .graphicsLayer { rotationZ = angle }
+                    )
+                }
             }
 
             // live VU over the baked meter strip
