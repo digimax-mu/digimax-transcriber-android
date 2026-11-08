@@ -309,8 +309,8 @@ private fun App() {
             )
 
             // spinning cassette hubs — drawn 8-tooth cogs sized to sit flush on the baked hubs
-            val hubPx = 0.082f * wPx
-            listOf(0.3776f to 0.4813f, 0.6283f to 0.4815f).forEach { (fcx, fcy) ->
+            val hubPx = 0.0703f * wPx
+            listOf(0.3701f to 0.4815f, 0.6279f to 0.4815f).forEach { (fcx, fcy) ->
                 HubWheel(
                     Modifier
                         .offset { IntOffset((fcx * wPx - hubPx / 2f).roundToInt(), (fcy * hPx - hubPx / 2f).roundToInt()) }
@@ -441,9 +441,11 @@ private fun KeyZone(modifier: Modifier, enabled: Boolean, sunk: Boolean, highlig
     }
 }
 
-private val HubFace = Color(0xFFEAE6D9)
-private val HubHi   = Color(0xFFF5F2EA)
-private val HubLo   = Color(0xFFCAC3B0)
+private val HubGrey  = Color(0xFFCBC6C0)
+private val HubGreyLo = Color(0xFFB2ADA4)
+private val HubEdge  = Color(0xFFB0AAA2)
+private val HubTooth = Color(0xFF968F87)
+private val HubCtr   = Color(0xFF786F66)
 private val TapeDk  = Color(0xFF3C2A1C)
 private val TapeLt  = Color(0xFF5A4030)
 
@@ -466,62 +468,28 @@ private fun TapeBand(modifier: Modifier, shift: Float, moving: Boolean) {
     }
 }
 
-/** The capstan / pinch-roller: the spinning drive shaft that pulls the tape past the head. */
-@Composable
-private fun Capstan(modifier: Modifier, angle: Float) {
-    Canvas(modifier.graphicsLayer { rotationZ = angle }) {
-        val cx = size.width / 2f; val cy = size.height / 2f
-        val R = size.minDimension / 2f
-        drawCircle(Brush.radialGradient(listOf(Color(0xFF4A423A), Color(0xFF221C17)), center = Offset(cx - R * 0.3f, cy - R * 0.3f), radius = R), radius = R, center = Offset(cx, cy))  // dark rubber roller, lit top-left
-        for (i in 0 until 3) {                                                            // a couple of marks so the spin reads
-            val a = (i * 120.0) * PI / 180.0
-            drawLine(Color(0x55000000),
-                Offset(cx + (R * 0.2f * cos(a)).toFloat(), cy + (R * 0.2f * sin(a)).toFloat()),
-                Offset(cx + (R * 0.82f * cos(a)).toFloat(), cy + (R * 0.82f * sin(a)).toFloat()),
-                strokeWidth = R * 0.1f)
-        }
-        drawCircle(Color(0xFFD4CDBD), radius = R * 0.24f, center = Offset(cx, cy))        // bright capstan pin
-        drawCircle(Color(0xFF8A8276), radius = R * 0.24f, center = Offset(cx, cy), style = Stroke(width = 1.5f))
-    }
-}
-
-/** A white 8-tooth cassette hub cog, drawn over the baked hub and rotated for clean spin. */
+/** A solid grey cassette hub (rim teeth + centre) drawn over the baked hub for a tight fit, rotated to spin. */
 @Composable
 private fun HubWheel(modifier: Modifier, angle: Float) {
     Canvas(modifier.graphicsLayer { rotationZ = angle }) {
         val cx = size.width / 2f; val cy = size.height / 2f
         val R = size.minDimension / 2f
-        val rOut = R * 0.97f; val rIn = R * 0.80f
+        fun pt(rad: Float, a: Double) = Offset(cx + (rad * cos(a)).toFloat(), cy + (rad * sin(a)).toFloat())
+        // solid disc, flat grey with a faint radial darkening — no directional light, so no seam while spinning
+        drawCircle(Brush.radialGradient(listOf(HubGrey, HubGrey, HubGreyLo), center = Offset(cx, cy), radius = R), radius = R, center = Offset(cx, cy))
+        // tooth notches around the rim
         val n = 8
-        val tw = (PI / n * 0.52).toFloat()
-        val step = (2.0 * PI / n).toFloat()
-        fun pt(rad: Float, a: Float) = Offset(cx + rad * cos(a.toDouble()).toFloat(), cy + rad * sin(a.toDouble()).toFloat())
-        val path = Path()
         for (i in 0 until n) {
-            val a = i * step
-            val p1 = pt(rOut, a - tw); val p2 = pt(rOut, a + tw)
-            val v1 = pt(rIn, a + step / 2f - tw * 0.3f); val v2 = pt(rIn, a + step / 2f + tw * 0.3f)
-            if (i == 0) path.moveTo(p1.x, p1.y) else path.lineTo(p1.x, p1.y)
-            path.lineTo(p2.x, p2.y); path.lineTo(v1.x, v1.y); path.lineTo(v2.x, v2.y)
+            val a = i * 2.0 * PI / n; val wv = 0.18
+            val a1 = pt(R * 0.78f, a - wv); val a2 = pt(R * 0.78f, a + wv)
+            val a3 = pt(R, a + wv * 0.7); val a4 = pt(R, a - wv * 0.7)
+            val p = Path()
+            p.moveTo(a1.x, a1.y); p.lineTo(a2.x, a2.y); p.lineTo(a3.x, a3.y); p.lineTo(a4.x, a4.y); p.close()
+            drawPath(p, HubTooth)
         }
-        path.close()
-        drawPath(path, Brush.radialGradient(listOf(HubHi, HubFace, HubLo), center = Offset(cx, cy), radius = rOut))
-        // drive-spindle socket: the dark splined hole the player's spindle turns — this is the drive
-        val sr = R * 0.42f
-        val m = 6
-        val spline = Path()
-        for (i in 0 until m) {
-            val a = i * (2.0 * PI / m).toFloat()
-            val o1 = pt(sr, a - 0.30f); val o2 = pt(sr, a + 0.30f)
-            val v = pt(sr * 0.58f, (i + 0.5f) * (2.0 * PI / m).toFloat())
-            if (i == 0) spline.moveTo(o1.x, o1.y) else spline.lineTo(o1.x, o1.y)
-            spline.lineTo(o2.x, o2.y); spline.lineTo(v.x, v.y)
-        }
-        spline.close()
-        drawPath(spline, Color(0xFF2B2420))
-        drawCircle(Color(0xFF17120E), radius = sr * 0.5f, center = Offset(cx, cy))
-        drawCircle(HubHi.copy(alpha = 0.6f), radius = sr * 0.16f, center = Offset(cx, cy))
-        drawCircle(HubLo.copy(alpha = 0.55f), radius = rOut, center = Offset(cx, cy), style = Stroke(width = R * 0.05f))
+        drawCircle(HubEdge, radius = R * 0.58f, center = Offset(cx, cy), style = Stroke(width = R * 0.045f))
+        drawCircle(HubCtr, radius = R * 0.20f, center = Offset(cx, cy))
+        drawCircle(HubGrey, radius = R * 0.07f, center = Offset(cx, cy))
     }
 }
 
