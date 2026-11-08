@@ -10,8 +10,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -25,8 +25,9 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,13 +38,24 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.cos
+import kotlin.math.sin
 
-private val Red = Color(0xFFE3262E)
-private val Ink = Color(0xFF111111)
-private val Grey = Color(0xFF5A5A5A)
-private val Bg = Color(0xFFFAFAFA)
-private val Panel = Color(0xFFFFFFFF)
-private val Line = Color(0xFFECECEC)
+// ---- full-retro cassette palette ----
+private val Desk      = Color(0xFFBFA373)   // tan "desk" background
+private val Case      = Color(0xFFE7D9B8)   // cream plastic
+private val CaseEdge  = Color(0xFF6B4F34)   // brown edge
+private val Ink       = Color(0xFF3A2A1A)   // dark-brown text
+private val Dim       = Color(0xFF7A6A52)
+private val Window    = Color(0xFF221812)   // cassette window
+private val Reel      = Color(0xFFEADFC4)   // reel spokes
+private val Tape      = Color(0xFF4A3420)   // wound tape
+private val Amber     = Color(0xFFD9A441)
+private val Rec       = Color(0xFFC42B1C)   // record red
+private val Lcd       = Color(0xFF9FB08A)   // LCD green-grey
+private val LcdInk    = Color(0xFF223018)
+private val SegOff    = Color(0x33000000)
+private val SegGreen  = Color(0xFF4E7A3A)
 
 private fun txtOf(wav: File) = File(wav.parentFile, wav.nameWithoutExtension + ".txt")
 private fun emailedOf(wav: File) = File(wav.parentFile, wav.nameWithoutExtension + ".emailed")
@@ -74,7 +86,7 @@ private fun App() {
 
     var elapsed by remember { mutableStateOf(0L) }
     var tick by remember { mutableStateOf(0) }
-    var status by remember { mutableStateOf("Tap Record, then lock your phone.") }
+    var status by remember { mutableStateOf("Press REC. Lock the phone — it keeps rolling.") }
     var busy by remember { mutableStateOf(false) }
     var lastDone by remember { mutableStateOf<String?>(null) }
     var destEmail by remember { mutableStateOf(Prefs.getEmail(ctx)) }
@@ -82,6 +94,24 @@ private fun App() {
     var pendingEmailWav by remember { mutableStateOf<File?>(null) }
     var expanded by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<File?>(null) }
+
+    // reel rotation + smoothed VU, driven by the live mic level
+    var angle by remember { mutableStateOf(0f) }
+    var vu by remember { mutableStateOf(0f) }
+    LaunchedEffect(recording) {
+        if (recording) {
+            val t0 = System.currentTimeMillis()
+            while (RecState.recording) {
+                elapsed = (System.currentTimeMillis() - t0) / 1000
+                val l = RecState.level
+                vu = if (l > vu) l else vu * 0.82f
+                angle = (angle + 2.5f + l * 14f) % 360f
+                delay(33)
+            }
+        } else {
+            vu = 0f; elapsed = 0; tick++
+        }
+    }
 
     fun emailRec(wav: File) {
         val txt = txtOf(wav)
@@ -105,20 +135,15 @@ private fun App() {
         val text = runCatching { Transcriber.transcribe(ctx, wav) }.getOrElse { "Error: ${it.message}" }
         busy = false
         if (text.isNotBlank()) {
-            txtOf(wav).writeText(text)
-            expanded = wav.name
-            status = "Transcribed."
+            txtOf(wav).writeText(text); expanded = wav.name; status = "Transcribed."
             if (destEmail.isBlank()) { pendingEmailWav = null; showEmailDialog = true }
         } else status = "No speech detected."
         tick++
     }
 
+    // transcribe automatically once a recording finishes
     LaunchedEffect(recording) {
-        if (recording) {
-            val t0 = System.currentTimeMillis()
-            while (RecState.recording) { elapsed = (System.currentTimeMillis() - t0) / 1000; delay(500) }
-        } else {
-            elapsed = 0; tick++
+        if (!recording) {
             val f = RecState.lastFile
             if (f != null && f != lastDone) { lastDone = f; transcribe(File(f)) }
         }
@@ -133,13 +158,12 @@ private fun App() {
     if (showEmailDialog) {
         var draft by remember { mutableStateOf(destEmail) }
         AlertDialog(
+            containerColor = Case,
             onDismissRequest = { showEmailDialog = false; pendingEmailWav = null },
-            title = { Text("Send transcripts to") },
+            title = { Text("Send transcripts to", color = Ink) },
             text = {
-                OutlinedTextField(
-                    value = draft, onValueChange = { draft = it },
-                    singleLine = true, placeholder = { Text("you@example.com") }
-                )
+                OutlinedTextField(draft, { draft = it }, singleLine = true,
+                    placeholder = { Text("you@example.com") })
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -147,89 +171,167 @@ private fun App() {
                     showEmailDialog = false
                     val w = pendingEmailWav; pendingEmailWav = null
                     if (destEmail.isNotBlank() && w != null) emailRec(w)
-                }) { Text("Save") }
+                }) { Text("Save", color = Rec) }
             },
-            dismissButton = { TextButton(onClick = { showEmailDialog = false; pendingEmailWav = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showEmailDialog = false; pendingEmailWav = null }) { Text("Cancel", color = Dim) } }
         )
     }
 
     deleteTarget?.let { wav ->
         AlertDialog(
+            containerColor = Case,
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete recording?") },
-            text = { Text("This removes the audio and its transcript from this phone.") },
+            title = { Text("Delete tape?", color = Ink) },
+            text = { Text("Removes the audio and its transcript from this phone.", color = Dim) },
             confirmButton = {
                 TextButton(onClick = {
                     wav.delete(); txtOf(wav).delete(); emailedOf(wav).delete()
                     if (expanded == wav.name) expanded = null
                     deleteTarget = null; tick++
-                }) { Text("Delete", color = Red) }
+                }) { Text("Delete", color = Rec) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel", color = Dim) } }
         )
     }
 
-    Surface(color = Bg, modifier = Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+    Surface(color = Desk, modifier = Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
 
-            Image(
-                painterResource(R.drawable.dm_logo), contentDescription = "Digimax",
-                modifier = Modifier.height(26.dp)
-            )
+            Text("DIGIMAX", color = Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = 4.sp)
+            Text("PORTABLE TRANSCRIBER · MOD 4", color = Dim, fontSize = 10.sp, letterSpacing = 2.sp)
             Spacer(Modifier.height(14.dp))
-            Text("Transcriber", color = Ink, fontWeight = FontWeight.Bold, fontSize = 34.sp)
-            Text("Record, transcribe on-device, email it. Nothing leaves your phone.", color = Grey, fontSize = 14.sp)
-            Spacer(Modifier.height(18.dp))
 
-            Panel {
+            // ---- the deck ----
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(Case, RoundedCornerShape(18.dp))
+                    .border(2.dp, CaseEdge, RoundedCornerShape(18.dp))
+                    .padding(16.dp)
+            ) {
+                CassetteWindow(recording = recording, angle = angle, elapsed = elapsed)
+                Spacer(Modifier.height(14.dp))
+                Text("REC LEVEL", color = Dim, fontSize = 9.sp, letterSpacing = 2.sp)
+                Spacer(Modifier.height(4.dp))
+                VuMeter(vu)
+                Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = { if (RecState.recording) RecorderService.stop(ctx) else RecorderService.start(ctx) },
                     enabled = !busy,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (recording) Ink else Red, contentColor = Color.White
+                        containerColor = if (recording) Ink else Rec, contentColor = Case
                     ),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth().height(68.dp)
-                ) { Text(if (recording) "■  Stop" else "●  Record", fontSize = 22.sp, fontWeight = FontWeight.Bold) }
-
-                Spacer(Modifier.height(14.dp))
-                Waveform(active = recording)
-                Spacer(Modifier.height(6.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(if (recording) "● recording" else status, color = if (busy || recording) Red else Grey, fontSize = 13.sp)
-                    Text(fmt(elapsed), color = Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().height(60.dp)
+                ) {
+                    Text(if (recording) "■  STOP" else "●  REC",
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(if (recording) "● REC  ·  rolling" else status,
+                    color = if (recording) Rec else Dim, fontSize = 12.sp)
             }
 
             Spacer(Modifier.height(16.dp))
-            Panel {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Recordings", color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+
+            // ---- tape library ----
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(Case, RoundedCornerShape(14.dp))
+                    .border(1.dp, CaseEdge.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                    .padding(16.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("TAPES", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp, letterSpacing = 2.sp)
                     if (destEmail.isNotBlank())
-                        TextButton(onClick = { pendingEmailWav = null; showEmailDialog = true }) { Text("✉ $destEmail", fontSize = 11.sp, color = Grey) }
+                        TextButton(onClick = { pendingEmailWav = null; showEmailDialog = true }) {
+                            Text("✉ $destEmail", fontSize = 11.sp, color = Dim)
+                        }
                 }
                 if (files.isEmpty()) {
-                    Text("None yet.", color = Grey, fontSize = 13.sp)
+                    Text("No tapes yet.", color = Dim, fontSize = 13.sp)
                 } else {
                     files.forEachIndexed { idx, wav ->
-                        if (idx > 0) HorizontalDivider(color = Line)
-                        RecRow(
-                            wav = wav,
-                            expanded = expanded == wav.name,
-                            busy = busy,
+                        if (idx > 0) HorizontalDivider(color = CaseEdge.copy(alpha = 0.2f))
+                        RecRow(wav, expanded == wav.name, busy,
                             onToggle = { expanded = if (expanded == wav.name) null else wav.name },
                             onTranscribe = { scope.launch { lastDone = wav.absolutePath; transcribe(wav) } },
                             onEmail = { emailRec(wav) },
-                            onDelete = { deleteTarget = wav }
-                        )
+                            onDelete = { deleteTarget = wav })
                     }
                 }
             }
 
             Spacer(Modifier.height(12.dp))
-            Text(
-                "Stops when locked? Settings → Apps → Digimax Transcriber → Battery → Unrestricted.",
-                color = Grey, fontSize = 12.sp
+            Text("On-device · no internet. Stops when locked? Battery → Unrestricted.",
+                color = Dim, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun CassetteWindow(recording: Boolean, angle: Float, elapsed: Long) {
+    Box(Modifier.fillMaxWidth().height(170.dp).background(Window, RoundedCornerShape(12.dp))) {
+        Canvas(Modifier.fillMaxSize().padding(14.dp)) {
+            val w = size.width; val h = size.height
+            val r = h * 0.30f
+            val ly = h * 0.42f
+            val lx = w * 0.30f; val rx = w * 0.70f
+            // exposed tape between reels
+            drawLine(Tape, Offset(lx, ly + r), Offset(rx, ly + r), strokeWidth = h * 0.04f)
+            listOf(lx, rx).forEach { cx ->
+                // wound tape
+                drawCircle(Tape, radius = r, center = Offset(cx, ly))
+                // hub
+                drawCircle(Case, radius = r * 0.34f, center = Offset(cx, ly))
+                // spokes rotating
+                val spokes = 6
+                for (k in 0 until spokes) {
+                    val a = Math.toRadians((angle + k * 360f / spokes).toDouble())
+                    drawLine(
+                        Reel,
+                        Offset(cx + cos(a).toFloat() * r * 0.34f, ly + sin(a).toFloat() * r * 0.34f),
+                        Offset(cx + cos(a).toFloat() * r * 0.92f, ly + sin(a).toFloat() * r * 0.92f),
+                        strokeWidth = h * 0.03f
+                    )
+                }
+                drawCircle(Reel, radius = r, center = Offset(cx, ly), style = Stroke(width = 2f))
+                drawCircle(Reel, radius = r * 0.18f, center = Offset(cx, ly))
+            }
+        }
+        // REC lamp
+        if (recording) Box(
+            Modifier.align(Alignment.TopEnd).padding(10.dp).size(12.dp)
+                .background(Rec, RoundedCornerShape(6.dp))
+        )
+        // LCD counter
+        Box(
+            Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
+                .background(Lcd, RoundedCornerShape(5.dp)).padding(horizontal = 14.dp, vertical = 4.dp)
+        ) {
+            Text(fmt(elapsed), color = LcdInk, fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold, fontSize = 18.sp, letterSpacing = 2.sp)
+        }
+    }
+}
+
+@Composable
+private fun VuMeter(level: Float) {
+    Canvas(Modifier.fillMaxWidth().height(20.dp)) {
+        val n = 22; val gap = 3f
+        val segW = (size.width - gap * (n - 1)) / n
+        val lit = (level.coerceIn(0f, 1f) * n).toInt()
+        for (i in 0 until n) {
+            val c = when {
+                i >= n * 0.85 -> Rec
+                i >= n * 0.60 -> Amber
+                else -> SegGreen
+            }
+            drawRoundRect(
+                color = if (i < lit) c else SegOff,
+                topLeft = Offset(i * (segW + gap), 0f),
+                size = Size(segW, size.height),
+                cornerRadius = CornerRadius(2f, 2f)
             )
         }
     }
@@ -242,14 +344,16 @@ private fun RecRow(
 ) {
     val txt = txtOf(wav)
     val emailed = emailedOf(wav).exists()
-    val state = when { emailed -> "Emailed"; txt.exists() -> "Transcribed"; else -> "Recorded" }
+    val state = when { emailed -> "EMAILED"; txt.exists() -> "TRANSCRIBED"; else -> "RECORDED" }
     Column(Modifier.fillMaxWidth().clickable { onToggle() }.padding(vertical = 10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(stamp.format(Date(wav.lastModified())), color = Ink, fontSize = 14.sp)
-                Text("${wav.length() / 1024} KB · $state", color = if (emailed) Red else Grey, fontSize = 12.sp)
+                Text("${wav.length() / 1024} KB · $state", color = if (emailed) Rec else Dim,
+                    fontSize = 11.sp, letterSpacing = 1.sp)
             }
-            Text(if (expanded) "▲" else "▼", color = Grey, fontSize = 12.sp)
+            Text(if (expanded) "▲" else "▼", color = Dim, fontSize = 12.sp)
         }
         if (expanded) {
             Spacer(Modifier.height(8.dp))
@@ -258,47 +362,15 @@ private fun RecRow(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (txt.exists()) {
                     Button(onClick = onEmail, enabled = !busy,
-                        colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Color.White),
+                        colors = ButtonDefaults.buttonColors(containerColor = Rec, contentColor = Case),
                         shape = RoundedCornerShape(8.dp)) { Text("Email", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                 } else {
                     Button(onClick = onTranscribe, enabled = !busy,
-                        colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Color.White),
+                        colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Case),
                         shape = RoundedCornerShape(8.dp)) { Text("Transcribe", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                 }
-                OutlinedButton(onClick = onDelete, shape = RoundedCornerShape(8.dp)) { Text("Delete", fontSize = 13.sp, color = Red) }
+                OutlinedButton(onClick = onDelete, shape = RoundedCornerShape(8.dp)) { Text("Delete", fontSize = 13.sp, color = Rec) }
             }
         }
     }
-}
-
-@Composable
-private fun Waveform(active: Boolean) {
-    val bars = remember { mutableStateListOf<Float>().apply { repeat(56) { add(0f) } } }
-    LaunchedEffect(active) {
-        if (active) {
-            while (RecState.recording) {
-                bars.removeAt(0); bars.add(RecState.level.coerceIn(0f, 1f)); delay(50)
-            }
-        }
-        for (i in bars.indices) bars[i] = 0f
-    }
-    Canvas(Modifier.fillMaxWidth().height(52.dp)) {
-        val n = bars.size
-        val bw = size.width / n
-        val mid = size.height / 2f
-        bars.forEachIndexed { i, v ->
-            val h = (v * size.height).coerceAtLeast(3f)
-            drawRoundRect(
-                color = if (active) Red else Line,
-                topLeft = Offset(i * bw + bw * 0.25f, mid - h / 2f),
-                size = Size(bw * 0.5f, h),
-                cornerRadius = CornerRadius(2f, 2f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun Panel(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(18.dp)) { content() }
 }
