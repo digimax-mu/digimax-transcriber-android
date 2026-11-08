@@ -303,8 +303,8 @@ private fun App() {
             )
 
             // spinning reels over the baked hubs (left/right, same rotation)
-            val reelPx = 0.121f * wPx
-            listOf(Triple(R.drawable.reel_l, 0.332f, 0.432f), Triple(R.drawable.reel_r, 0.656f, 0.432f)).forEach { (res, fcx, fcy) ->
+            val reelPx = 0.1211f * wPx
+            listOf(Triple(R.drawable.reel_l, 0.3379f, 0.4274f), Triple(R.drawable.reel_r, 0.6514f, 0.4274f)).forEach { (res, fcx, fcy) ->
                 Image(
                     painter = painterResource(res), contentDescription = null,
                     modifier = Modifier
@@ -315,7 +315,7 @@ private fun App() {
             }
 
             // live VU over the baked meter strip
-            VuBar(rectMod(0.426f, 0.655f, 0.935f, 0.745f), vu)
+            VuBar(rectMod(0.420f, 0.630f, 0.943f, 0.751f), vu)
 
             // COUNTER digits
             Box(rectMod(0.115f, 0.675f, 0.355f, 0.737f), contentAlignment = Alignment.Center) {
