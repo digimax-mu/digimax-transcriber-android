@@ -320,10 +320,10 @@ private fun App() {
             // ---- the deck ----
             Column(
                 Modifier.fillMaxWidth()
-                    .shadow(12.dp, RoundedCornerShape(20.dp))
+                    .shadow(16.dp, RoundedCornerShape(20.dp))
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Brush.verticalGradient(listOf(Case.lighten(0.12f), Case, Case.darken(0.92f))))
-                    .border(2.dp, Brush.verticalGradient(listOf(CaseEdge.lighten(0.3f), CaseEdge)), RoundedCornerShape(20.dp))
+                    .background(Brush.verticalGradient(listOf(Case.lighten(0.28f), Case, Case.darken(0.80f))))
+                    .border(2.dp, Brush.verticalGradient(listOf(Case.lighten(0.55f), CaseEdge.darken(0.75f))), RoundedCornerShape(20.dp))
                     .padding(16.dp)
             ) {
                 CassetteLid(recording = recording, angle = angle)
@@ -621,60 +621,58 @@ private fun Transport(
 }
 
 /**
- * Flat mechanical lever: hinged at its TOP edge, the free bottom edge angles down
- * into the chassis. Pressed = tilts further down + a deeper drop shadow in the slot.
- * The face is a moulded-plastic gradient with a top highlight and a shaded front lip.
+ * Extruded 3D push-key. A dark base block shows the button's side-wall thickness;
+ * the moulded face sits raised on top with a hard top-light→dark gradient, a bright
+ * specular strip and a deep drop shadow. Pressed = the face drops onto the base, the
+ * side wall moves to the top edge (reads as pushed into the slot) and the shadow shrinks.
  */
 @Composable
 private fun TKey(
     modifier: Modifier, label: String, glyph: String, sunk: Boolean,
     color: Color, glyphColor: Color, enabled: Boolean, onClick: () -> Unit
 ) {
-    val faceColor = if (sunk) color.darken() else color
+    val faceColor = if (sunk) color.darken(0.93f) else color
+    val wall = 9.dp
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, color = Ink, fontSize = 9.sp, maxLines = 1)
         Spacer(Modifier.height(5.dp))
-        // dark recess the lever sits in (inner shadow look)
+        // recessed chassis slot the key sits in
         Box(
-            Modifier.fillMaxWidth().height(64.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .background(Brush.verticalGradient(listOf(CaseEdge.darken(0.7f), CaseEdge, CaseEdge.lighten(0.15f))))
-                .padding(top = 3.dp, start = 3.dp, end = 3.dp),
-            contentAlignment = Alignment.TopCenter
+            Modifier.fillMaxWidth().height(62.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(Brush.verticalGradient(listOf(CaseEdge.darken(0.5f), CaseEdge.darken(0.82f))))
+                .padding(4.dp)
         ) {
+            // BASE — the button's body/side wall (dark), fills the slot
             Box(
-                Modifier.fillMaxWidth().height(52.dp)
+                Modifier.fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Brush.verticalGradient(listOf(faceColor.darken(0.74f), faceColor.darken(0.5f))))
+            )
+            // FACE — raised on top; drops by `wall` when pressed
+            Box(
+                Modifier.fillMaxWidth().height(45.dp)
+                    .offset(y = if (sunk) wall else 0.dp)
                     .shadow(
-                        elevation = if (sunk) 14.dp else 5.dp,
-                        shape = RoundedCornerShape(7.dp), clip = false,
+                        elevation = if (sunk) 2.dp else 10.dp,
+                        shape = RoundedCornerShape(8.dp), clip = false,
                         ambientColor = Shade, spotColor = Shade
                     )
-                    .graphicsLayer {
-                        // pivot on the top edge; negative rotationX dips the bottom edge back/down
-                        transformOrigin = TransformOrigin(0.5f, 0f)
-                        rotationX = if (sunk) -26f else -13f
-                        cameraDistance = 14f * density
-                    }
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(plastic(faceColor))
-                    .clickable(enabled = enabled) { onClick() }
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Brush.verticalGradient(
+                        listOf(faceColor.lighten(0.34f), faceColor, faceColor.darken(0.88f))))
+                    .clickable(enabled = enabled) { onClick() },
+                contentAlignment = Alignment.Center
             ) {
-                // top specular highlight
+                // bright specular strip across the top
                 Box(
-                    Modifier.fillMaxWidth().fillMaxHeight(0.42f).align(Alignment.TopCenter)
+                    Modifier.fillMaxWidth().fillMaxHeight(0.40f).align(Alignment.TopCenter)
                         .background(
                             Brush.verticalGradient(listOf(Gloss, Color.Transparent)),
-                            RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp)
+                            RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
                         )
                 )
-                Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Spacer(Modifier.weight(1f))
-                    Text(glyph, color = glyphColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(5.dp))
-                    // front lip: a shaded band to read as the lever's leading face
-                    Box(Modifier.fillMaxWidth().height(5.dp)
-                        .background(Brush.verticalGradient(listOf(faceColor.darken(0.78f), faceColor.darken(0.6f)))))
-                }
+                Text(glyph, color = glyphColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
