@@ -158,11 +158,21 @@ private fun App() {
         if (!wav.exists() || wav.length() <= 44L) { status = "Nothing recorded."; return }
         busy = true; status = "Transcribing on-device…"
         val text = runCatching { Transcriber.transcribe(ctx, wav) }.getOrElse { "Error: ${it.message}" }
+        if (text.isBlank() || text.startsWith("Error:")) {
+            busy = false
+            status = if (text.startsWith("Error:")) text else "No speech detected."
+            tick++; return
+        }
+        // Summary + key points + action items (Workers AI); text only, fail-soft.
+        status = "Summarising…"
+        val summary = Summarizer.summarise(text)
+        val body = if (summary != null)
+            summary + "\n\n─────────  FULL TRANSCRIPT  ─────────\n\n" + text
+        else text
+        txtOf(wav).writeText(body)
         busy = false
-        if (text.isNotBlank()) {
-            txtOf(wav).writeText(text); status = "Transcribed."
-            if (destEmail.isBlank()) { pendingEmailWav = null; showEmailDialog = true }
-        } else status = "No speech detected."
+        status = if (summary != null) "Transcribed + summarised." else "Transcribed."
+        if (destEmail.isBlank()) { pendingEmailWav = null; showEmailDialog = true }
         tick++
     }
 
