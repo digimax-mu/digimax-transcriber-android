@@ -63,6 +63,7 @@ class RecorderService : Service() {
         RecState.lastFile = f.absolutePath
         RecState.recording = true
         RecState.paused = false
+        TranscriberWidgetProvider.refresh(this)   // flip the home-screen tile to RECORDING
     }
 
     private fun stopRecording() {
@@ -70,6 +71,7 @@ class RecorderService : Service() {
         RecState.recording = false
         RecState.paused = false
         stopForeground(STOP_FOREGROUND_REMOVE)
+        TranscriberWidgetProvider.refresh(this)   // flip the tile back to idle
     }
 
     override fun onDestroy() {

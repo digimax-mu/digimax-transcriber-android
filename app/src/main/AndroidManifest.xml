@@ -33,6 +33,29 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <!-- Invisible trampoline: the widget tap lands here so the FGS start
+             is a foreground start (Android 12+ blocks background mic-FGS). -->
+        <activity
+            android:name=".RecordToggleActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Home-screen quick-record widget. -->
+        <receiver
+            android:name=".TranscriberWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/transcriber_widget_info" />
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

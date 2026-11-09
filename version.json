@@ -1,6 +1,6 @@
 {
-  "versionCode": 13,
-  "versionName": "0.7.6",
-  "url": "https://github.com/divergentinc2021/digimax-transcriber-android/releases/download/v0.7.6/digimax-transcriber-v0.7.6.apk",
-  "notes": "Official Digimax logo and brand red, plus a 7-segment LCD counter."
+  "versionCode": 14,
+  "versionName": "0.7.7",
+  "url": "https://github.com/divergentinc2021/digimax-transcriber-android/releases/download/v0.7.7/digimax-transcriber-v0.7.7.apk",
+  "notes": "Home-screen widget: drop the Digimax tile on your home screen and tap to start or stop recording in the background — no need to open the app."
 }

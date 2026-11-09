@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-screen widget tile. The whole frame is one tap target that fires
+     RecordToggleActivity (a translucent trampoline) to start/stop the
+     background RecorderService. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clickable="true">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:src="@drawable/widget_bg"
+        android:contentDescription="@string/app_name" />
+
+    <TextView
+        android:id="@+id/widget_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="18dp"
+        android:layout_marginBottom="16dp"
+        android:text="● TAP TO\nRECORD"
+        android:textColor="#E9E4DE"
+        android:textStyle="bold"
+        android:textSize="15sp"
+        android:lineSpacingMultiplier="0.95"
+        android:shadowColor="#000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="3" />
+</FrameLayout>
