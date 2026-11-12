@@ -38,9 +38,15 @@ class RecorderService : Service() {
             ACTION_STOP -> { stopRecording(); stopSelf() }
             ACTION_PAUSE -> setPaused(true)
             ACTION_RESUME -> setPaused(false)
-            else -> startRecording()
+            ACTION_START -> startRecording()
+            // A null/unknown action is an OS restart after a low-memory kill —
+            // do NOT resurrect recording (the old code did, draining the battery
+            // and keeping the mic live after the user had stopped).
+            else -> stopSelf()
         }
-        return START_STICKY
+        // Never auto-restart: recording is always user-initiated, so a killed
+        // service stays dead instead of silently coming back to record.
+        return START_NOT_STICKY
     }
 
     private fun setPaused(p: Boolean) {

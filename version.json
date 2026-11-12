@@ -1,6 +1,6 @@
 {
-  "versionCode": 15,
-  "versionName": "0.7.8",
-  "url": "https://github.com/divergentinc2021/digimax-transcriber-android/releases/download/v0.7.8/digimax-transcriber-v0.7.8.apk",
-  "notes": "Transcripts now come with a short summary, key points and action items above the full text."
+  "versionCode": 16,
+  "versionName": "0.7.9",
+  "url": "https://github.com/divergentinc2021/digimax-transcriber-android/releases/download/v0.7.9/digimax-transcriber-v0.7.9.apk",
+  "notes": "Battery fix: the recording service no longer restarts itself in the background after Android closes it, so it stops draining the battery and keeping the mic awake after you stop."
 }
